@@ -1,106 +1,222 @@
 {
+  "basic_settings": {
+    "description": "基本开关",
+    "type": "object",
+    "hint": "控制插件是否启用，以及在哪些聊天场景中使用。",
+    "obvious_hint": true,
+    "items": {
+      "enabled": {
+        "description": "启用对话自然收尾",
+        "type": "bool",
+        "default": true,
+        "hint": "关闭后插件不会读取对话、调用判断模型或拦截消息。",
+        "obvious_hint": true
+      },
+      "private_enabled": {
+        "description": "私聊中启用",
+        "type": "bool",
+        "default": true,
+        "hint": "建议保持开启。"
+      },
+      "group_enabled": {
+        "description": "群聊中启用（实验）",
+        "type": "bool",
+        "default": false,
+        "hint": "群聊中的对话边界更复杂，建议充分测试后再开启。"
+      }
+    }
+  },
+  "judgement_settings": {
+    "description": "判断设置",
+    "type": "object",
+    "hint": "选择用于判断对话是否说完的模型，并控制判断的谨慎程度。",
+    "obvious_hint": true,
+    "items": {
+      "judge_provider_id": {
+        "description": "对话判断模型",
+        "type": "string",
+        "default": "",
+        "_special": "select_provider",
+        "obvious_hint": true,
+        "hint": "选择 AstrBot 中已经配置好的模型。未选择或模型不可用时，消息会正常交给机器人回复。"
+      },
+      "confidence_threshold": {
+        "description": "结束判断门槛",
+        "type": "float",
+        "default": 0.85,
+        "slider": {
+          "min": 0.5,
+          "max": 1.0,
+          "step": 0.01
+        },
+        "hint": "数值越高，插件越谨慎。只有判断结果达到此门槛才会保持沉默；这不是回复概率。"
+      },
+      "judge_timeout_seconds": {
+        "description": "判断等待时间（秒）",
+        "type": "float",
+        "default": 5.0,
+        "slider": {
+          "min": 1.0,
+          "max": 30.0,
+          "step": 0.5
+        },
+        "hint": "等待超过这个时间后，消息会正常交给机器人回复。"
+      }
+    }
+  },
+  "context_settings": {
+    "description": "对话记录",
+    "type": "object",
+    "hint": "控制判断时参考多少条最近消息，以及内存缓存保留多久。",
+    "obvious_hint": true,
+    "items": {
+      "history_limit": {
+        "description": "参考最近消息数",
+        "type": "int",
+        "default": 10,
+        "slider": {
+          "min": 4,
+          "max": 30,
+          "step": 1
+        },
+        "hint": "数量越多，上下文越完整，但会增加少量模型用量。"
+      },
+      "session_ttl_minutes": {
+        "description": "会话缓存保留时间（分钟）",
+        "type": "int",
+        "default": 1440,
+        "slider": {
+          "min": 5,
+          "max": 10080,
+          "step": 5
+        },
+        "hint": "超过此时间未使用的会话记录会自动从内存中清理。"
+      }
+    }
+  },
+  "advanced_settings": {
+    "description": "高级设置（一般保持默认）",
+    "type": "object",
+    "hint": "用于控制模型用量和排查问题，普通用户通常不需要修改。",
+    "obvious_hint": true,
+    "items": {
+      "max_message_chars": {
+        "description": "单条消息读取上限（字符）",
+        "type": "int",
+        "default": 800,
+        "slider": {
+          "min": 100,
+          "max": 4000,
+          "step": 100
+        },
+        "hint": "超出部分不会发送给对话判断模型。"
+      },
+      "max_context_chars": {
+        "description": "对话内容读取上限（字符）",
+        "type": "int",
+        "default": 6000,
+        "slider": {
+          "min": 1000,
+          "max": 20000,
+          "step": 500
+        },
+        "hint": "超出时优先保留较新的消息。"
+      },
+      "judge_max_tokens": {
+        "description": "判断结果长度上限",
+        "type": "int",
+        "default": 160,
+        "slider": {
+          "min": 64,
+          "max": 512,
+          "step": 16
+        },
+        "hint": "用于限制判断模型的输出长度；部分模型服务可能忽略此设置。"
+      },
+      "debug_log": {
+        "description": "记录调试信息",
+        "type": "bool",
+        "default": false,
+        "hint": "只记录脱敏后的判断结果、可信度、耗时和错误类型，不记录完整聊天内容。"
+      }
+    }
+  },
   "enabled": {
-    "description": "启用插件",
+    "description": "旧版配置兼容项",
     "type": "bool",
     "default": true,
-    "hint": "关闭后不记录历史、不调用 Judge，也不拦截任何消息。"
+    "invisible": true
   },
   "private_enabled": {
-    "description": "在私聊中启用",
+    "description": "旧版配置兼容项",
     "type": "bool",
-    "default": true
+    "default": true,
+    "invisible": true
   },
   "group_enabled": {
-    "description": "在群聊中启用（实验）",
+    "description": "旧版配置兼容项",
     "type": "bool",
     "default": false,
-    "hint": "群聊闭环更复杂，默认关闭。启用前请在自己的平台和群聊习惯下充分测试。"
+    "invisible": true
   },
   "judge_provider_id": {
-    "description": "Judge Provider",
+    "description": "旧版配置兼容项",
     "type": "string",
     "default": "",
-    "_special": "select_provider",
-    "obvious_hint": true,
-    "hint": "选择 AstrBot 中已配置的聊天模型。留空或不可用时插件将 Fail-open，正常回复。"
+    "invisible": true
   },
   "history_limit": {
-    "description": "每个会话保留的最近消息数",
+    "description": "旧版配置兼容项",
     "type": "int",
     "default": 10,
-    "slider": {
-      "min": 4,
-      "max": 30,
-      "step": 1
-    }
+    "invisible": true
   },
   "confidence_threshold": {
-    "description": "END 最低可信度",
+    "description": "旧版配置兼容项",
     "type": "float",
     "default": 0.85,
-    "slider": {
-      "min": 0.5,
-      "max": 1.0,
-      "step": 0.01
-    },
-    "hint": "这不是随机回复概率。只有 END 且可信度达到该阈值才会静默结束。"
+    "invisible": true
   },
   "judge_timeout_seconds": {
-    "description": "Judge 超时（秒）",
+    "description": "旧版配置兼容项",
     "type": "float",
     "default": 5.0,
-    "slider": {
-      "min": 1.0,
-      "max": 30.0,
-      "step": 0.5
-    },
-    "hint": "超时会立即 Fail-open，不会吞掉正常消息。"
+    "invisible": true
   },
   "debug_log": {
-    "description": "输出脱敏调试日志",
+    "description": "旧版配置兼容项",
     "type": "bool",
     "default": false,
-    "hint": "不记录完整聊天历史或 Judge reason；只记录进程内 HMAC 会话标识、三态、可信度、耗时和错误类别。"
+    "invisible": true
   },
   "session_ttl_minutes": {
-    "description": "空闲会话缓存存活时间（分钟）",
+    "description": "旧版配置兼容项",
     "type": "int",
     "default": 1440,
-    "slider": {
-      "min": 5,
-      "max": 10080,
-      "step": 5
-    }
+    "invisible": true
   },
   "max_message_chars": {
-    "description": "单条历史消息最大字符数",
+    "description": "旧版配置兼容项",
     "type": "int",
     "default": 800,
-    "slider": {
-      "min": 100,
-      "max": 4000,
-      "step": 100
-    }
+    "invisible": true
   },
   "max_context_chars": {
-    "description": "Judge 对话 JSON 数据最大字符数",
+    "description": "旧版配置兼容项",
     "type": "int",
     "default": 6000,
-    "slider": {
-      "min": 1000,
-      "max": 20000,
-      "step": 500
-    }
+    "invisible": true
   },
   "judge_max_tokens": {
-    "description": "Judge 最大输出 Token",
+    "description": "旧版配置兼容项",
     "type": "int",
     "default": 160,
-    "slider": {
-      "min": 64,
-      "max": 512,
-      "step": 16
-    },
-    "hint": "作为 Provider 调用参数传入；是否严格生效取决于所选 Provider 的实现。"
+    "invisible": true
+  },
+  "config_layout_version": {
+    "description": "配置结构版本",
+    "type": "int",
+    "default": 1,
+    "invisible": true
   }
 }

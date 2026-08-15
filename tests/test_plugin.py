@@ -80,6 +80,9 @@ sys.modules.setdefault("astrbot.api.star", star_module)
 
 from astrbot_plugin_conversation_closer.main import ConversationCloserPlugin  # noqa: E402
 from astrbot_plugin_conversation_closer.models import Decision, JudgeResult  # noqa: E402
+from astrbot_plugin_conversation_closer.settings import (  # noqa: E402
+    CURRENT_CONFIG_LAYOUT_VERSION,
+)
 
 
 class Plain:
@@ -194,21 +197,44 @@ class FakeContext:
 
 def plugin_config(**overrides):
     config = {
-        "enabled": True,
-        "private_enabled": True,
-        "group_enabled": False,
-        "judge_provider_id": "judge",
-        "history_limit": 10,
-        "confidence_threshold": 0.85,
-        "judge_timeout_seconds": 5.0,
-        "debug_log": False,
-        "session_ttl_minutes": 1440,
-        "max_message_chars": 800,
-        "max_context_chars": 6000,
-        "judge_max_tokens": 160,
+        "basic_settings": {
+            "enabled": True,
+            "private_enabled": True,
+            "group_enabled": False,
+        },
+        "judgement_settings": {
+            "judge_provider_id": "judge",
+            "confidence_threshold": 0.85,
+            "judge_timeout_seconds": 5.0,
+        },
+        "context_settings": {
+            "history_limit": 10,
+            "session_ttl_minutes": 1440,
+        },
+        "advanced_settings": {
+            "max_message_chars": 800,
+            "max_context_chars": 6000,
+            "judge_max_tokens": 160,
+            "debug_log": False,
+        },
     }
-    config.update(overrides)
+    for key, value in overrides.items():
+        for section in config.values():
+            if key in section:
+                section[key] = value
+                break
+        else:
+            raise AssertionError(f"unknown test configuration key: {key}")
     return config
+
+
+class SavingConfig(dict):
+    def __init__(self, values):
+        super().__init__(values)
+        self.save_calls = 0
+
+    def save_config(self) -> None:
+        self.save_calls += 1
 
 
 @pytest.mark.asyncio
@@ -259,6 +285,36 @@ async def test_missing_provider_fails_open_and_keeps_history() -> None:
     assert context.calls == []
     history = await plugin.store.snapshot(event.unified_msg_origin)
     assert history[-1].content == "需要正常处理的问题"
+
+
+def test_plugin_migrates_and_saves_legacy_flat_config() -> None:
+    legacy = SavingConfig(
+        {
+            "enabled": False,
+            "private_enabled": True,
+            "group_enabled": False,
+            "judge_provider_id": " legacy-judge ",
+            "history_limit": 12,
+            "confidence_threshold": 0.91,
+            "judge_timeout_seconds": 4.0,
+            "debug_log": False,
+            "session_ttl_minutes": 60,
+            "max_message_chars": 700,
+            "max_context_chars": 5000,
+            "judge_max_tokens": 128,
+        }
+    )
+
+    plugin = ConversationCloserPlugin(FakeContext(""), legacy)
+
+    assert legacy.save_calls == 1
+    assert legacy["enabled"] is False
+    assert legacy["config_layout_version"] == CURRENT_CONFIG_LAYOUT_VERSION
+    assert legacy["basic_settings"]["enabled"] is False
+    assert legacy["judgement_settings"]["judge_provider_id"] == " legacy-judge "
+    assert plugin.settings.enabled is False
+    assert plugin.settings.judge_provider_id == "legacy-judge"
+    assert plugin.settings.history_limit == 12
 
 
 @pytest.mark.asyncio
@@ -367,8 +423,8 @@ async def test_status_clear_test_commands_and_terminate() -> None:
     status = [item async for item in plugin.closer_status(event)]
     latest = [item async for item in plugin.closer_test(event)]
     cleared = [item async for item in plugin.closer_clear(event)]
-    assert "Conversation Closer 状态" in status[0]
-    assert "decision: CONTINUE" in latest[0]
+    assert "对话自然收尾状态" in status[0]
+    assert "结果：继续正常回复" in latest[0]
     assert "已清除" in cleared[0]
 
     await plugin.terminate()

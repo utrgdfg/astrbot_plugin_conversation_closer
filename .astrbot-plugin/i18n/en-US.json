@@ -2,47 +2,71 @@
   "metadata": {
     "display_name": "对话自然收尾",
     "short_desc": "Uses an independent LLM to stop only naturally completed exchanges.",
-    "desc": "Silently stops the default reply only for a high-confidence closed exchange. Uncertain and failed judgements always fail open."
+    "desc": "Silently stops the default reply only for a high-confidence closed exchange. Uncertain results and model failures continue normally."
   },
   "config": {
-    "enabled": {
-      "description": "Enable plugin",
-      "hint": "When disabled, no history is stored, no judge is called, and no messages are intercepted."
+    "basic_settings": {
+      "description": "Basic controls",
+      "hint": "Choose whether the plugin is enabled and where it is used.",
+      "items": {
+        "enabled": {
+          "description": "Enable natural conversation endings",
+          "hint": "When disabled, the plugin does not read conversations, call the decision model, or intercept messages."
+        },
+        "private_enabled": {
+          "description": "Enable in private chats"
+        },
+        "group_enabled": {
+          "description": "Enable in group chats (experimental)"
+        }
+      }
     },
-    "private_enabled": {
-      "description": "Enable in private chats"
+    "judgement_settings": {
+      "description": "Decision settings",
+      "hint": "Select the model that decides whether a conversation is complete.",
+      "items": {
+        "judge_provider_id": {
+          "description": "Conversation decision model",
+          "hint": "Choose an existing AstrBot model. Messages continue normally when it is missing or unavailable."
+        },
+        "confidence_threshold": {
+          "description": "Ending confidence threshold",
+          "hint": "Higher values are more cautious. This is not a random reply probability."
+        },
+        "judge_timeout_seconds": {
+          "description": "Decision wait time (seconds)"
+        }
+      }
     },
-    "group_enabled": {
-      "description": "Enable in group chats (experimental)"
+    "context_settings": {
+      "description": "Conversation history",
+      "hint": "Control how much recent context is used and how long it stays in memory.",
+      "items": {
+        "history_limit": {
+          "description": "Recent messages to consider"
+        },
+        "session_ttl_minutes": {
+          "description": "Conversation cache lifetime (minutes)"
+        }
+      }
     },
-    "judge_provider_id": {
-      "description": "Judge Provider",
-      "hint": "Choose an existing AstrBot chat provider. Missing or unavailable providers fail open."
-    },
-    "history_limit": {
-      "description": "Recent messages kept per session"
-    },
-    "confidence_threshold": {
-      "description": "Minimum END confidence",
-      "hint": "This is not a random reply probability."
-    },
-    "judge_timeout_seconds": {
-      "description": "Judge timeout (seconds)"
-    },
-    "debug_log": {
-      "description": "Enable privacy-conscious debug logs"
-    },
-    "session_ttl_minutes": {
-      "description": "Idle session cache TTL (minutes)"
-    },
-    "max_message_chars": {
-      "description": "Maximum characters per history message"
-    },
-    "max_context_chars": {
-      "description": "Maximum total judge context characters"
-    },
-    "judge_max_tokens": {
-      "description": "Maximum judge output tokens"
+    "advanced_settings": {
+      "description": "Advanced settings (defaults recommended)",
+      "hint": "Controls model usage and diagnostics. Most users do not need to change these settings.",
+      "items": {
+        "max_message_chars": {
+          "description": "Per-message reading limit (characters)"
+        },
+        "max_context_chars": {
+          "description": "Conversation reading limit (characters)"
+        },
+        "judge_max_tokens": {
+          "description": "Decision result length limit"
+        },
+        "debug_log": {
+          "description": "Record diagnostic information"
+        }
+      }
     }
   }
 }

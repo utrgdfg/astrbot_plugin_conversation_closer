@@ -40,6 +40,16 @@ def function_names(module: ast.Module) -> set[str]:
 
 
 def check(root: Path) -> None:
+    config_module = parse(root / "astrbot/core/config/astrbot_config.py")
+    astrbot_config = class_node(config_module, "AstrBotConfig")
+    schema_parser = method_node(astrbot_config, "_config_schema_to_default_config")
+    schema_contract = ast.dump(schema_parser)
+    for marker in ("object", "items"):
+        if marker not in schema_contract:
+            raise ContractError(
+                f"AstrBotConfig grouped object schema contract changed: {marker}"
+            )
+
     context_module = parse(root / "astrbot/core/star/context.py")
     context = class_node(context_module, "Context")
     llm_generate = method_node(context, "llm_generate")

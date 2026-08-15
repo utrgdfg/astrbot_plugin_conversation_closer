@@ -202,7 +202,7 @@ class LLMJudge:
             )
         except TimeoutError:
             return JudgeResult.fail_open(
-                "Judge 调用超时，已正常放行",
+                "判断等待超时，消息已正常放行",
                 error_code="timeout",
                 elapsed_seconds=time.monotonic() - started,
             )
@@ -210,7 +210,7 @@ class LLMJudge:
             raise
         except Exception as exc:  # noqa: BLE001 - fail-open boundary by design
             return JudgeResult.fail_open(
-                "Judge 调用失败，已正常放行",
+                "判断模型暂时不可用，消息已正常放行",
                 error_code=f"provider_{type(exc).__name__}",
                 elapsed_seconds=time.monotonic() - started,
             )
@@ -220,7 +220,7 @@ class LLMJudge:
             result = parse_judge_response(raw_text)
         except JudgeOutputError:
             return JudgeResult.fail_open(
-                "Judge 返回格式无效，已正常放行",
+                "判断结果无法识别，消息已正常放行",
                 error_code="invalid_output",
                 elapsed_seconds=elapsed,
             )

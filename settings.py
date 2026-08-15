@@ -2,24 +2,95 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from typing import Any
 
+CONFIG_SECTIONS: dict[str, tuple[str, ...]] = {
+    "basic_settings": ("enabled", "private_enabled", "group_enabled"),
+    "judgement_settings": (
+        "judge_provider_id",
+        "confidence_threshold",
+        "judge_timeout_seconds",
+    ),
+    "context_settings": ("history_limit", "session_ttl_minutes"),
+    "advanced_settings": (
+        "max_message_chars",
+        "max_context_chars",
+        "judge_max_tokens",
+        "debug_log",
+    ),
+}
+CONFIG_LAYOUT_VERSION_KEY = "config_layout_version"
+CURRENT_CONFIG_LAYOUT_VERSION = 2
 
-def _bool_value(config: Mapping[str, Any], key: str, default: bool) -> bool:
-    value = config.get(key, default)
+_MISSING = object()
+
+
+def _uses_legacy_layout(config: Mapping[str, Any]) -> bool:
+    version = config.get(CONFIG_LAYOUT_VERSION_KEY, 1)
+    return (
+        not isinstance(version, int)
+        or isinstance(version, bool)
+        or version < CURRENT_CONFIG_LAYOUT_VERSION
+    )
+
+
+def _setting_value(
+    config: Mapping[str, Any],
+    section: str,
+    key: str,
+    default: Any,
+) -> Any:
+    """Read new grouped settings while retaining legacy flat-config support."""
+
+    if _uses_legacy_layout(config):
+        legacy_value = config.get(key, _MISSING)
+        if legacy_value is not _MISSING:
+            return legacy_value
+    section_value = config.get(section, {})
+    if not isinstance(section_value, Mapping):
+        return default
+    return section_value.get(key, default)
+
+
+def migrate_legacy_config(config: MutableMapping[str, Any]) -> bool:
+    """Move legacy flat keys into the grouped schema without losing values."""
+
+    if not _uses_legacy_layout(config):
+        return False
+
+    for section, keys in CONFIG_SECTIONS.items():
+        legacy_values = {key: config[key] for key in keys if key in config}
+        if not legacy_values:
+            continue
+        current = config.get(section, {})
+        grouped = dict(current) if isinstance(current, Mapping) else {}
+        grouped.update(legacy_values)
+        config[section] = grouped
+    config[CONFIG_LAYOUT_VERSION_KEY] = CURRENT_CONFIG_LAYOUT_VERSION
+    return True
+
+
+def _bool_value(
+    config: Mapping[str, Any],
+    section: str,
+    key: str,
+    default: bool,
+) -> bool:
+    value = _setting_value(config, section, key, default)
     return value if isinstance(value, bool) else default
 
 
 def _number_value(
     config: Mapping[str, Any],
+    section: str,
     key: str,
     default: float,
     minimum: float,
     maximum: float,
 ) -> float:
-    value = config.get(key, default)
+    value = _setting_value(config, section, key, default)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return default
     return min(max(float(value), minimum), maximum)
@@ -27,12 +98,13 @@ def _number_value(
 
 def _int_value(
     config: Mapping[str, Any],
+    section: str,
     key: str,
     default: int,
     minimum: int,
     maximum: int,
 ) -> int:
-    value = config.get(key, default)
+    value = _setting_value(config, section, key, default)
     if isinstance(value, bool) or not isinstance(value, int):
         return default
     return min(max(value, minimum), maximum)
@@ -59,16 +131,39 @@ class PluginSettings:
     def from_mapping(cls, config: Mapping[str, Any]) -> PluginSettings:
         """Load known settings and clamp resource-related values."""
 
-        provider = config.get("judge_provider_id", "")
+        provider = _setting_value(
+            config,
+            "judgement_settings",
+            "judge_provider_id",
+            "",
+        )
         provider_id = provider.strip() if isinstance(provider, str) else ""
         return cls(
-            enabled=_bool_value(config, "enabled", True),
-            private_enabled=_bool_value(config, "private_enabled", True),
-            group_enabled=_bool_value(config, "group_enabled", False),
+            enabled=_bool_value(config, "basic_settings", "enabled", True),
+            private_enabled=_bool_value(
+                config,
+                "basic_settings",
+                "private_enabled",
+                True,
+            ),
+            group_enabled=_bool_value(
+                config,
+                "basic_settings",
+                "group_enabled",
+                False,
+            ),
             judge_provider_id=provider_id,
-            history_limit=_int_value(config, "history_limit", 10, 4, 30),
+            history_limit=_int_value(
+                config,
+                "context_settings",
+                "history_limit",
+                10,
+                4,
+                30,
+            ),
             confidence_threshold=_number_value(
                 config,
+                "judgement_settings",
                 "confidence_threshold",
                 0.85,
                 0.5,
@@ -76,14 +171,21 @@ class PluginSettings:
             ),
             judge_timeout_seconds=_number_value(
                 config,
+                "judgement_settings",
                 "judge_timeout_seconds",
                 5.0,
                 1.0,
                 30.0,
             ),
-            debug_log=_bool_value(config, "debug_log", False),
+            debug_log=_bool_value(
+                config,
+                "advanced_settings",
+                "debug_log",
+                False,
+            ),
             session_ttl_minutes=_int_value(
                 config,
+                "context_settings",
                 "session_ttl_minutes",
                 1440,
                 5,
@@ -91,6 +193,7 @@ class PluginSettings:
             ),
             max_message_chars=_int_value(
                 config,
+                "advanced_settings",
                 "max_message_chars",
                 800,
                 100,
@@ -98,6 +201,7 @@ class PluginSettings:
             ),
             max_context_chars=_int_value(
                 config,
+                "advanced_settings",
                 "max_context_chars",
                 6000,
                 1000,
@@ -105,6 +209,7 @@ class PluginSettings:
             ),
             judge_max_tokens=_int_value(
                 config,
+                "advanced_settings",
                 "judge_max_tokens",
                 160,
                 64,
