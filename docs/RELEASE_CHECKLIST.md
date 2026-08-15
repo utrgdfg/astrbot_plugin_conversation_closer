@@ -5,7 +5,8 @@
 - [x] `metadata.yaml` identity is `utrgdfg/astrbot_plugin_conversation_closer`.
 - [x] Version is `0.1.0` in package, metadata, project metadata, and changelog.
 - [x] Repository URL uses HTTPS GitHub.
-- [x] MIT license, security policy, contribution guide, changelog, and original logo are present.
+- [x] MIT license, security policy, contribution guide, changelog, and a 256×256 root `logo.png` are present.
+- [ ] Confirm redistribution rights for the user-supplied `logo.png` before marketplace submission.
 - [ ] Confirm the GitHub repository is public before marketplace submission.
 - [ ] Add a concise GitHub description and relevant repository topics.
 

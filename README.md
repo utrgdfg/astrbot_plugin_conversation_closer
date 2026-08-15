@@ -274,4 +274,4 @@ bandit -q -r . -x ./tests
 
 ## 许可证
 
-[MIT](LICENSE)。本插件为独立实现，没有复制或修改 should-I-respond 类插件代码。`logo.png` 为本项目原创生成资产，不包含第三方素材或品牌元素，随本项目按 MIT 许可分发。
+[MIT](LICENSE)。本插件为独立实现，没有复制或修改 should-I-respond 类插件代码。`logo.png` 为项目维护者提供的独立图像资产，不自动适用源码 MIT 许可证；再分发前请确认拥有相应权利，详见 [`ASSET_LICENSE.md`](ASSET_LICENSE.md)。
