@@ -1,0 +1,106 @@
+{
+  "enabled": {
+    "description": "启用插件",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后不记录历史、不调用 Judge，也不拦截任何消息。"
+  },
+  "private_enabled": {
+    "description": "在私聊中启用",
+    "type": "bool",
+    "default": true
+  },
+  "group_enabled": {
+    "description": "在群聊中启用（实验）",
+    "type": "bool",
+    "default": false,
+    "hint": "群聊闭环更复杂，默认关闭。启用前请在自己的平台和群聊习惯下充分测试。"
+  },
+  "judge_provider_id": {
+    "description": "Judge Provider",
+    "type": "string",
+    "default": "",
+    "_special": "select_provider",
+    "obvious_hint": true,
+    "hint": "选择 AstrBot 中已配置的聊天模型。留空或不可用时插件将 Fail-open，正常回复。"
+  },
+  "history_limit": {
+    "description": "每个会话保留的最近消息数",
+    "type": "int",
+    "default": 10,
+    "slider": {
+      "min": 4,
+      "max": 30,
+      "step": 1
+    }
+  },
+  "confidence_threshold": {
+    "description": "END 最低可信度",
+    "type": "float",
+    "default": 0.85,
+    "slider": {
+      "min": 0.5,
+      "max": 1.0,
+      "step": 0.01
+    },
+    "hint": "这不是随机回复概率。只有 END 且可信度达到该阈值才会静默结束。"
+  },
+  "judge_timeout_seconds": {
+    "description": "Judge 超时（秒）",
+    "type": "float",
+    "default": 5.0,
+    "slider": {
+      "min": 1.0,
+      "max": 30.0,
+      "step": 0.5
+    },
+    "hint": "超时会立即 Fail-open，不会吞掉正常消息。"
+  },
+  "debug_log": {
+    "description": "输出脱敏调试日志",
+    "type": "bool",
+    "default": false,
+    "hint": "不记录完整聊天历史或 Judge reason；只记录进程内 HMAC 会话标识、三态、可信度、耗时和错误类别。"
+  },
+  "session_ttl_minutes": {
+    "description": "空闲会话缓存存活时间（分钟）",
+    "type": "int",
+    "default": 1440,
+    "slider": {
+      "min": 5,
+      "max": 10080,
+      "step": 5
+    }
+  },
+  "max_message_chars": {
+    "description": "单条历史消息最大字符数",
+    "type": "int",
+    "default": 800,
+    "slider": {
+      "min": 100,
+      "max": 4000,
+      "step": 100
+    }
+  },
+  "max_context_chars": {
+    "description": "Judge 对话 JSON 数据最大字符数",
+    "type": "int",
+    "default": 6000,
+    "slider": {
+      "min": 1000,
+      "max": 20000,
+      "step": 500
+    }
+  },
+  "judge_max_tokens": {
+    "description": "Judge 最大输出 Token",
+    "type": "int",
+    "default": 160,
+    "slider": {
+      "min": 64,
+      "max": 512,
+      "step": 16
+    },
+    "hint": "作为 Provider 调用参数传入；是否严格生效取决于所选 Provider 的实现。"
+  }
+}

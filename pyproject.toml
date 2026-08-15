@@ -1,0 +1,51 @@
+[project]
+name = "astrbot-plugin-conversation-closer"
+version = "0.1.0"
+description = "Use an independent LLM to stop only naturally completed AstrBot exchanges."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "utrgdfg" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "bandit>=1.8,<2",
+  "pytest>=8.4,<9",
+  "pytest-asyncio>=1.1,<2",
+  "PyYAML>=6,<7",
+  "ruff==0.15.22",
+]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["astrbot_plugin_conversation_closer"]
+package-dir = { astrbot_plugin_conversation_closer = "." }
+
+[tool.setuptools.package-data]
+astrbot_plugin_conversation_closer = [
+  "_conf_schema.json",
+  "metadata.yaml",
+  "logo.png",
+  ".astrbot-plugin/i18n/*.json",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
+pythonpath = [".."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".git", ".venv", "build", "dist"]
+
+[tool.ruff.lint]
+select = ["ASYNC", "B", "C4", "E", "F", "I", "Q", "UP", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["B017"]

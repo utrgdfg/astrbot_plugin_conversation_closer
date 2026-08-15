@@ -1,0 +1,7 @@
+{
+  "metadata": {
+    "display_name": "对话自然收尾 / Conversation Closer",
+    "short_desc": "使用独立 LLM 判断交流是否自然闭环，避免 Bot 为回复而回复。",
+    "desc": "仅在高置信度确认交流已经闭环时静默停止默认回复；不确定和异常情况全部正常放行。"
+  }
+}
