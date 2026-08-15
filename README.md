@@ -3,6 +3,7 @@
 [![CI](https://github.com/utrgdfg/astrbot_plugin_conversation_closer/actions/workflows/ci.yml/badge.svg)](https://github.com/utrgdfg/astrbot_plugin_conversation_closer/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.24.2%2C%3C5-blue)](https://astrbot.app/)
+[![Moe Counter](https://mayu.due.moe/get/@utrgdfg-astrbot_plugin_conversation_closer?theme=booru-lewd)](https://github.com/utrgdfg/astrbot_plugin_conversation_closer)
 
 使用一个独立、可配置的 LLM 判断当前交流是否已经自然闭环，从而消除“为了回复而回复”的无限收尾。
 
