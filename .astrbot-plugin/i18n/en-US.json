@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "display_name": "Conversation Closer",
+    "display_name": "对话自然收尾",
     "short_desc": "Uses an independent LLM to stop only naturally completed exchanges.",
     "desc": "Silently stops the default reply only for a high-confidence closed exchange. Uncertain and failed judgements always fail open."
   },
