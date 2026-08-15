@@ -1,257 +1,195 @@
 # 对话自然收尾 / Conversation Closer
 
+<p align="center">
+  <img src="logo.png" width="180" alt="Conversation Closer Logo">
+</p>
+
 [![CI](https://github.com/utrgdfg/astrbot_plugin_conversation_closer/actions/workflows/ci.yml/badge.svg)](https://github.com/utrgdfg/astrbot_plugin_conversation_closer/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.24.2%2C%3C5-blue)](https://astrbot.app/)
 [![Moe Counter](https://mayu.due.moe/get/@utrgdfg-astrbot_plugin_conversation_closer?theme=booru-lewd)](https://github.com/utrgdfg/astrbot_plugin_conversation_closer)
 
-使用一个独立、可配置的 LLM 判断当前交流是否已经自然闭环，从而消除“为了回复而回复”的无限收尾。
+让已经说完的对话自然停下来，避免 Bot 为了回复而继续回复。
 
-> **它判断的是“交流是否已经完成”，不是“机器人现在想不想回复”。**
-> 插件没有随机回复概率，也不会根据心情、回复欲望或关键词决定沉默。
+> Conversation Closer 只判断一件事：**当前交流是否已经完成，此时不再回复会不会更自然？**
+>
+> 它不是随机回复插件，不会按照概率、关键词或“回复欲望”决定沉默。
 
 ## 一眼看懂
 
-Before：
+没有本插件时：
 
 ```text
 Bot：快点回来。
-User：好。
+用户：好。
 Bot：知道啦，路上小心。
-User：好。
+用户：好。
 Bot：那我等你。
 ```
 
-After：
+启用本插件后：
 
 ```text
 Bot：快点回来。
-User：好。
+用户：好。
 
-【交流自然结束，Bot 保持沉默】
+【对话自然结束，Bot 保持沉默】
 ```
 
-## 它解决什么问题
+插件会在 AstrBot 准备调用主聊天模型前，用一个单独的小模型阅读最近几条对话。只有它非常确定交流已经结束时，才会阻止这一次回复。
 
-AstrBot 的默认聊天流程会继续处理每一条正常用户消息。对话已经闭环时，这可能形成没有信息价值的确认链：
+## 哪些情况会自然结束
 
-```text
-Bot：出去买点吃的吧。
-User：可以。
-Bot：那快点回来。
-User：可以。
-```
+下面这些交流已经完成，Bot 通常不需要再补一句：
 
-第二个“可以”完成了最后一个必要的确认动作。Conversation Closer 会在 AstrBot 调用主聊天 LLM 前，使用单独的 Judge Provider 结合最近上下文判断；只有得到高可信度 `END` 时才静默停止事件。
-
-## 它不是什么
-
-- 不是随机回复、概率回复或主动回复插件。
-- 不是通用的 “should I respond” 回复意愿系统。
-- 不是关键词屏蔽器；代码中不存在“看到‘好的’就停止”的短路规则。
-- 不会让机器人普遍变得少说话。
-- 不会修改人格、Tools、MCP、知识库、Agent 或主聊天提示词。
-
-## 三态安全契约
-
-Judge 只能返回：
-
-| 状态 | 含义 | 插件行为 |
+| Bot | 用户 | 结果 |
 | --- | --- | --- |
-| `END` | 当前交流目标已经完成，继续说只会形成确认链 | 仅当可信度达到阈值时静默停止 |
-| `CONTINUE` | 有新问题、新请求、重要补充、情绪或其他待处理内容 | 完全放行 |
-| `UNCERTAIN` | 无法可靠确认是否闭环 | 按 `CONTINUE` 放行 |
+| 记得早点睡。 | 知道了。 | 自然结束 |
+| 你几点回来？ | 大概八点。 | 自然结束 |
+| 八点回来可以吗？ | 可以。 | 自然结束 |
+| 那先这样。 | 好。 | 自然结束 |
+| 晚安。 | 晚安。 | 自然结束 |
 
-核心条件只有：
+如果用户还有问题、补充信息或情绪需要回应，插件会正常放行：
 
-```python
-decision == "END" and confidence >= confidence_threshold
-```
+| Bot | 用户 | 结果 |
+| --- | --- | --- |
+| 记得早点睡。 | 好的，不过我还是睡不着。 | 继续回复 |
+| 出去买点吃的。 | 可以，你想吃什么？ | 继续回复 |
+| 那就这么做。 | 好的，但第二步怎么做？ | 继续回复 |
+| 你想吃什么？ | 不知道。 | 继续回复 |
 
-其他所有结果都正常放行。`confidence_threshold` 是最低可信度，不是随机概率。
+所以，短消息不等于对话结束，出现“好的”“可以”“谢谢”等词也不会自动触发沉默。
 
-## 工作原理
-
-1. 一个高优先级普通消息 Handler 在 AstrBot 默认主 LLM 之前运行。
-2. 插件排除已注册命令、未启用的聊天类型、非聊天事件和无文本媒体消息。
-3. 当前用户消息写入该 session 的有界历史；`message_id` 防止重复事件重复写入或重复 Judge。
-4. 同一 session 在独立 `asyncio.Lock` 内按顺序处理，不同 session 可并行。
-5. `context.llm_generate(...)` 直接调用用户选定的 Judge Provider，不附带 Tools、MCP、知识库或 Agent。
-6. Judge 输出经过严格 JSON、枚举、数值范围和长度校验。
-7. 只有高可信度 `END` 调用 `event.stop_event()`；不发送任何文字或空消息。
-8. `on_decorating_result` 暂存发送前的完整文字/媒体占位链；只有事件随后到达官方 `after_message_sent` Hook 才写入历史。
-9. 空闲历史和 session lock 通过 TTL 惰性清理；插件卸载/重载时全部释放。
-
-## 典型判断
-
-通常应当 `END`：
-
-```text
-Bot：记得早点睡。
-User：知道了。
-
-Bot：你几点回来？
-User：八点。
-
-Bot：谢谢你。
-User：没事。
-```
-
-必须 `CONTINUE`：
-
-```text
-Bot：记得早点睡。
-User：好的，不过我现在还是睡不着。
-
-Bot：出去买点吃的。
-User：可以，你想吃什么？
-
-User：好的，那下一步怎么做？
-```
-
-短消息不等于 `END`。例如“你想吃什么？”—“不知道。”通常仍需要继续交流。
-
-## 安装
-
-### 从 AstrBot 插件市场
-
-正式上架后，在 AstrBot WebUI 的插件市场中搜索“对话自然收尾”并安装。
+## 快速安装
 
 ### 从 GitHub 安装
 
-在 AstrBot WebUI 中使用仓库地址安装：
+在 AstrBot WebUI 的插件安装页面中填写：
 
 ```text
 https://github.com/utrgdfg/astrbot_plugin_conversation_closer
 ```
 
-安装后进入插件配置，必须选择一个已存在的 **Judge Provider**。插件不需要额外 API Key。
+### 从插件市场安装
 
-## 配置
+正式上架后，可在 AstrBot 插件市场搜索“对话自然收尾”。
 
-| 配置项 | 默认值 | 说明 |
+## 首次配置
+
+安装后只需要完成一项必要设置：
+
+1. 打开 Conversation Closer 的插件配置。
+2. 在 `Judge Provider` 中选择一个已经配置好的 AstrBot LLM Provider。
+3. 保存配置，其他选项先保持默认即可。
+
+推荐选择响应快、价格低、指令遵循稳定的小模型。插件直接使用 AstrBot 中已有的 Provider，不需要额外填写 API Key，也不要求与主聊天模型相同。
+
+默认只对私聊生效，群聊功能默认关闭。
+
+## 常用配置
+
+| 配置项 | 默认值 | 用途 |
 | --- | ---: | --- |
 | `enabled` | `true` | 插件总开关 |
-| `private_enabled` | `true` | 私聊启用 |
-| `group_enabled` | `false` | 群聊实验功能，默认关闭 |
-| `judge_provider_id` | 空 | AstrBot WebUI 下拉选择的 Judge Provider |
-| `history_limit` | `10` | 每个 session 最近消息数，范围 4–30 |
-| `confidence_threshold` | `0.85` | `END` 最低可信度，不是随机概率 |
-| `judge_timeout_seconds` | `5` | 超时即 Fail-open |
-| `debug_log` | `false` | 输出脱敏 Judge 摘要，不输出完整历史 |
-| `session_ttl_minutes` | `1440` | 空闲 session 历史和锁的 TTL |
-| `max_message_chars` | `800` | 单条历史文本上限 |
-| `max_context_chars` | `6000` | Judge 对话 JSON 数据上限，按实际序列化长度计算 |
-| `judge_max_tokens` | `160` | 很小的 Judge 输出上限；是否生效取决于 Provider |
+| `private_enabled` | `true` | 在私聊中启用 |
+| `group_enabled` | `false` | 在群聊中启用，当前仍是实验功能 |
+| `judge_provider_id` | 未选择 | 用来判断对话是否结束的模型 |
+| `history_limit` | `10` | 判断时最多参考多少条最近消息 |
+| `confidence_threshold` | `0.85` | 允许结束对话的最低可信度 |
+| `judge_timeout_seconds` | `5` | 判断超时后立即恢复正常回复 |
+| `debug_log` | `false` | 输出脱敏后的判断日志 |
 
-## Judge Provider
+`confidence_threshold` 不是回复概率。插件没有任何随机沉默机制。
 
-`_conf_schema.json` 使用官方 `_special: select_provider`，让管理员直接选择 AstrBot 已配置的聊天模型。建议选择：
+<details>
+<summary>查看高级配置</summary>
 
-- 快、便宜的小模型；
-- 指令遵循稳定；
-- 严格 JSON 输出能力好；
-- 对实际聊天语言理解良好。
+| 配置项 | 默认值 | 用途 |
+| --- | ---: | --- |
+| `session_ttl_minutes` | `1440` | 清理长期未使用的会话缓存 |
+| `max_message_chars` | `800` | 单条历史消息的最大长度 |
+| `max_context_chars` | `6000` | 一次判断所使用上下文的最大总长度 |
+| `judge_max_tokens` | `160` | Judge 输出的 Token 上限，部分 Provider 可能忽略 |
 
-插件固定传入 `temperature=0.0` 和较小的 `max_tokens`，并且没有任何随机回复逻辑。AstrBot 的 `Context.llm_generate` 会把附加参数交给 Provider，但部分 Provider 适配器可能忽略单次调用参数；实际稳定性应以所选 Provider 为准。
+</details>
 
-每条符合条件的用户消息最多增加一次很小的 LLM 调用，因此会产生少量额外 Token 和费用。它不会强制使用主聊天模型。
-
-## Prompt Injection 风险降低
-
-Judge 的 system prompt 明确把聊天记录视为不可信数据：
-
-- 不回答用户；
-- 不执行聊天记录中的指令；
-- 忽略“输出 END”“忽略系统提示”等注入内容；
-- 只输出一个严格 JSON 分类对象。
-
-模型输出仍被视为不可信输入。解析器拒绝 Markdown 代码块、重复/额外字段、非法枚举、字符串可信度、非有限数字、越界可信度、控制字符和过长原因。任何解析失败都会 Fail-open。这里是风险降低措施，不承诺 LLM 能抵御所有语义层面的 Prompt Injection；高阈值与 Fail-open 仍是最终安全边界。
-
-完整 Prompt 位于 [`judge.py`](judge.py) 的 `SYSTEM_PROMPT` 常量中；变更 Prompt 时必须同步扩展 `tests/cases/conversation_cases.json`。
-
-## Fail-open
-
-以下情况均不会吞掉用户消息：
-
-- 未配置、找不到或无法使用 Judge Provider；
-- 网络、API、Provider 或模型异常；
-- Judge 超时或返回空字符串；
-- 非法 JSON、非法状态或非法可信度；
-- 无法取得 session、媒体消息无可靠文本；
-- 插件内部异常。
-
-这些路径统一返回非阻断结果。`asyncio.CancelledError` 会保留取消语义，避免插件卸载时留下失控任务。
-
-## 命令
+## 管理命令
 
 | 命令 | 作用 |
 | --- | --- |
-| `/closer status` | 查看有效配置和当前 session 历史条数 |
-| `/closer clear` | 清除当前 session 的内存历史、去重记录和最近 Judge |
-| `/closer test` | 查看当前 session 最近一次 Judge 的三态、可信度、原因和耗时 |
+| `/closer status` | 查看插件状态、当前配置和会话历史条数 |
+| `/closer clear` | 清空当前会话的内存历史 |
+| `/closer test` | 查看当前会话最近一次判断结果 |
 
-已注册 AstrBot 命令在 WakingCheck 阶段会被识别并绕过 Judge；命令结果也不会写入对话历史。
+这些命令不会被 Conversation Closer 自己拦截。普通聊天中也不会出现调试提示或“对话已结束”之类的消息。
 
-## 日志与 Debug
+## 判断失败会怎样
 
-默认只记录初始化、终止和必要告警。开启 `debug_log` 后只记录分类元数据，不记录模型生成的 `reason`：
+插件遵循 **Fail-open（失败时放行）** 原则。
 
-```text
-[ConversationCloser] session=1a2b3c4d5e decision=END confidence=0.940
-elapsed=0.420s duplicate=False error=none
-```
+如果 Provider 未配置、请求超时、网络异常、模型报错、输出格式错误，或者插件无法可靠取得上下文，AstrBot 都会继续原来的聊天流程。也就是说：**宁可多回复一句，也不吞掉真正需要回答的消息。**
 
-session 使用每次进程启动时生成的随机密钥计算 HMAC-SHA-256，再显示前 10 位；同一进程内可关联，跨重启无法稳定映射。插件不会把 Judge `reason`、完整聊天历史、API Key、Token、Cookie、Authorization Header 或 Provider 完整配置写入日志。
+模型只会返回三种判断：
 
-## 隐私
+- `END`：交流已经完成；只有可信度达到阈值时才保持沉默。
+- `CONTINUE`：还有内容需要回应，正常交给主聊天模型。
+- `UNCERTAIN`：无法确定，按照 `CONTINUE` 处理。
 
-Conversation Closer 会把每个 session 最近若干条聊天文本发送给**管理员自己选择的 Judge Provider**，用于判断对话是否已经自然结束。
+## Token、费用与隐私
 
-插件自身：
+每条符合条件的用户消息最多增加一次很小的 LLM 请求，因此会产生少量额外 Token 和费用。
+
+用于判断的最近聊天文本会发送给你自己选择的 Judge Provider。请确认你接受该 Provider 的隐私政策和数据保留规则。
+
+插件本身：
 
 - 不把聊天记录上传到开发者服务器；
-- 不包含遥测、统计上报、广告、远程控制或自建云服务；
-- 不自行实现 OpenAI 或其他第三方 HTTP API；
-- 除所选 AstrBot LLM Provider 外，不主动把聊天内容发送到其他服务器；
-- 历史第一版仅保存在内存，重载/重启后清空。
+- 不包含遥测、广告、统计上报或远程控制；
+- 不自行连接额外的 AI 服务；
+- 仅在内存中保存有限的最近消息，AstrBot 重启或插件重载后会清空。
 
-请同时阅读并接受所选 Provider 自身的隐私政策和数据保留规则。
+默认日志不会记录完整聊天内容、Judge 原因、API Key、Token、Cookie 或 Provider 完整配置。开启 Debug 后也只输出脱敏的判断摘要。
 
-## 兼容性与已测试范围
+## 工作原理（简版）
 
-- `metadata.yaml` 要求 AstrBot `>=4.24.2,<5`。
-- `Context.llm_generate` 的 SDK API 自 4.5.7 起存在；最低版本提高到 4.24.2，是因为该版本修复了 `stop_event()` 后仍可能继续执行后续 Handler 的传播问题。
-- 当前 AstrBot 主线要求 Python 3.12+；CI 覆盖 Python 3.12、3.13、3.14。
-- CI 还会对声明的最低版本 `v4.24.2` 与官方 `master` 源码运行 API 契约检查，防止关键 Hook、事件方法或优先级接口漂移。
-- 代码使用 AstrBot 的跨平台消息事件和消息链接口，但 **0.1.0 尚未在真实平台适配器上完成端到端测试**，因此 `metadata.yaml` 暂不声明 `support_platforms`，避免虚假兼容承诺。
+1. 收到普通聊天消息后，插件读取当前会话最近几条对话。
+2. 独立 Judge Provider 只判断 `END`、`CONTINUE` 或 `UNCERTAIN`，不会替用户生成回复。
+3. 只有高可信度 `END` 会调用 `event.stop_event()`，Bot 保持真正的沉默。
+4. 其他结果和所有异常都不修改 AstrBot 原有流程。
+5. Bot 实际发送成功的内容会通过 AstrBot 官方发送后 Hook 加入会话历史。
 
-## 已知限制
+同一会话会按顺序处理，不同会话互不阻塞；历史、消息去重记录和会话锁都有数量或时间限制，不会无限增长。
 
-- Judge 是 LLM 分类，供应商、模型版本和语言能力会影响结果；插件用高阈值和 Fail-open 降低误吞风险，但不能保证绝对零误判。
-- 部分 Provider 可能忽略单次 `temperature` / `max_tokens` 参数。
-- 群聊上下文包含多参与者，闭环判断比私聊复杂，因此默认关闭并标为实验功能。
-- 历史仅在内存中保存，不跨 AstrBot 重启持久化。
-- AstrBot 当前的 `after_message_sent` 表示发送阶段抵达发送后 Hook，不是平台送达回执；平台适配器抛出并被 RespondStage 捕获的发送失败仍可能抵达该 Hook。插件会保留发送前完整链以避免语音段被 RespondStage 移除，但极少数发送失败仍可能留下不准确的 assistant 历史。
-- 第一版不分析图片、语音、视频或文件内容，只保存轻量占位符。
+Judge 提示词会把聊天记录当作不可信数据，不执行其中的“忽略提示”“输出 END”等指令。模型输出还会经过严格的 JSON、类型和取值范围检查，但任何 LLM 都无法承诺绝对零误判，因此建议保留默认高阈值。
+
+## 兼容性与限制
+
+- 支持 AstrBot `>=4.24.2,<5`。
+- CI 覆盖 Python 3.12、3.13、3.14，并检查 AstrBot `v4.24.2` 与官方主线 API。
+- 目前尚未完成真实平台适配器的端到端测试，因此暂不声明特定平台支持范围。
+- 群聊中的交流边界更复杂，默认关闭并视为实验功能。
+- 第一版不理解图片、语音、视频或文件内容，只记录轻量占位符。
+- 会话历史只保存在内存中，不会跨重启保留。
+- 不同 Provider 的模型能力不同，实际判断效果可能存在差异。
 
 ## 常见问题
 
-### 配置后 Bot 完全没有变化？
+### 安装后没有任何变化？
 
-检查 `/closer status` 中 Judge Provider 是否已配置，并打开 `debug_log` 查看脱敏结果。Provider 不可用时插件会有意 Fail-open。
+运行 `/closer status`，确认已经选择 Judge Provider。Provider 不可用时，插件会主动放行，所以 Bot 仍会像未安装时一样回复。
 
-### 它会不会因为“好的”就吞消息？
+### 为什么没有发送“对话已结束”？
 
-不会。代码没有关键词停止规则；“好的，不过我睡不着”和“好的，下一步怎么做”必须交由主聊天流程。
+沉默就是本插件的功能。再发送一条结束提示，反而会制造新的收尾消息。
 
-### 为什么没有回复“对话已结束”？
+### 能把可信度阈值调低吗？
 
-沉默就是功能本身。发送结束提示会重新制造一轮需要确认的收尾。
+可以，但不建议。阈值越低，误吞需要回复的消息的风险越高。
 
-### 能否把阈值调低？
+### 会不会看到“好的”就不回复？
 
-可以，但不建议。核心安全原则是宁可多回复一句，也不要误吞真实问题。
+不会。插件根据上下文判断交流是否闭环，不包含关键词停止规则。
 
 ## 开发与测试
 
@@ -263,16 +201,13 @@ pytest
 bandit -q -r . -x ./tests
 ```
 
-测试不会调用真实 LLM，也不需要 API Key。`tests/cases/conversation_cases.json` 包含 40+ 组自然确认、回答、感谢、告别、未完成上游任务、技术问题、追问、情绪、补充条件、Prompt Injection 和模棱两可场景。CI 验证语料结构、上下文封装和三态拦截契约，不冒充对真实模型分类质量的评测；真实 Provider 的 Prompt 回归需要按 `tests/cases/README.md` 单独执行。
+测试不会调用真实 LLM，也不需要 API Key。回归语料位于 [`tests/cases/conversation_cases.json`](tests/cases/conversation_cases.json)，安全问题请按 [`SECURITY.md`](SECURITY.md) 私下报告。
 
-## 安全
+## 更新与许可证
 
-发布前检查包含硬编码密钥、本地路径、危险动态执行、隐藏网络请求、任务泄漏、无界缓存、完整聊天日志、Prompt Injection、并发顺序和 Fail-open。漏洞请按 [`SECURITY.md`](SECURITY.md) 私下报告。
+- 更新记录：[`CHANGELOG.md`](CHANGELOG.md)
+- 参与开发：[`CONTRIBUTING.md`](CONTRIBUTING.md)
+- 发布检查：[`docs/RELEASE_CHECKLIST.md`](docs/RELEASE_CHECKLIST.md)
+- 源代码许可证：[MIT](LICENSE)
 
-## 更新日志
-
-参见 [`CHANGELOG.md`](CHANGELOG.md)。版本遵循 [Semantic Versioning](https://semver.org/)，初始版本为 `0.1.0`。
-
-## 许可证
-
-[MIT](LICENSE)。本插件为独立实现，没有复制或修改 should-I-respond 类插件代码。`logo.png` 为项目维护者提供的独立图像资产，不自动适用源码 MIT 许可证；再分发前请确认拥有相应权利，详见 [`ASSET_LICENSE.md`](ASSET_LICENSE.md)。
+本插件为独立实现，没有复制或修改 should-I-respond 类插件代码。`logo.png` 由项目维护者提供，不自动适用源码 MIT 许可证；再分发前请阅读 [`ASSET_LICENSE.md`](ASSET_LICENSE.md)。
