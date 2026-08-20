@@ -4,10 +4,10 @@
   <img src="logo.png" width="180" alt="对话自然收尾项目图标">
 </p>
 
-[![CI](https://github.com/utrgdfg/astrbot_plugin_conversation_closer/actions/workflows/ci.yml/badge.svg)](https://github.com/utrgdfg/astrbot_plugin_conversation_closer/actions/workflows/ci.yml)
+[![持续集成](https://github.com/utrgdfg/astrbot_plugin_conversation_closer/actions/workflows/ci.yml/badge.svg)](https://github.com/utrgdfg/astrbot_plugin_conversation_closer/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![AstrBot](https://img.shields.io/badge/AstrBot-%3E%3D4.24.2%2C%3C5-blue)](https://astrbot.app/)
-让已经说完的对话自然停下来，避免 Bot 为了回复而继续回复。
+让已经说完的对话自然停下来，避免机器人为了回复而继续回复。
 
 > 本插件只判断一件事：**当前交流是否已经完成，此时不再回复会不会更自然？**
 >
@@ -18,29 +18,29 @@
 没有本插件时：
 
 ```text
-Bot：快点回来。
+机器人：快点回来。
 用户：好。
-Bot：知道啦，路上小心。
+机器人：知道啦，路上小心。
 用户：好。
-Bot：那我等你。
+机器人：那我等你。
 ```
 
 启用本插件后：
 
 ```text
-Bot：快点回来。
+机器人：快点回来。
 用户：好。
 
-【对话自然结束，Bot 保持沉默】
+【对话自然结束，机器人保持沉默】
 ```
 
 插件会在 AstrBot 准备调用主聊天模型前，用一个单独的小模型阅读最近几条对话。只有它非常确定交流已经结束时，才会阻止这一次回复。
 
 ## 哪些情况会自然结束
 
-下面这些交流已经完成，Bot 通常不需要再补一句：
+下面这些交流已经完成，机器人通常不需要再补一句：
 
-| Bot | 用户 | 结果 |
+| 机器人 | 用户 | 结果 |
 | --- | --- | --- |
 | 记得早点睡。 | 知道了。 | 自然结束 |
 | 你几点回来？ | 大概八点。 | 自然结束 |
@@ -50,7 +50,7 @@ Bot：快点回来。
 
 如果用户还有问题、补充信息或情绪需要回应，插件会正常放行：
 
-| Bot | 用户 | 结果 |
+| 机器人 | 用户 | 结果 |
 | --- | --- | --- |
 | 记得早点睡。 | 好的，不过我还是睡不着。 | 继续回复 |
 | 出去买点吃的。 | 可以，你想吃什么？ | 继续回复 |
@@ -63,7 +63,7 @@ Bot：快点回来。
 
 ### 从 GitHub 安装
 
-在 AstrBot WebUI 的插件安装页面中填写：
+在 AstrBot 管理面板的插件安装页面中填写：
 
 ```text
 https://github.com/utrgdfg/astrbot_plugin_conversation_closer
@@ -81,7 +81,7 @@ https://github.com/utrgdfg/astrbot_plugin_conversation_closer
 2. 在“对话判断模型”中选择一个已经配置好的 AstrBot 模型服务。
 3. 保存配置，其他选项先保持默认即可。
 
-推荐选择响应快、价格低、指令遵循稳定的小模型。插件直接使用 AstrBot 中已有的模型服务，不需要额外填写 API Key，也不要求与主聊天模型相同。
+推荐选择响应快、价格低、指令遵循稳定的小模型。插件直接使用 AstrBot 中已有的模型服务，不需要额外填写 API 密钥，也不要求与主聊天模型相同。
 
 默认只对私聊生效，群聊功能默认关闭。
 
@@ -147,15 +147,15 @@ https://github.com/utrgdfg/astrbot_plugin_conversation_closer
 - 不自行连接额外的 AI 服务；
 - 仅在内存中保存有限的最近消息，AstrBot 重启或插件重载后会清空。
 
-默认日志不会记录完整聊天内容、判断原因、API Key、Token、Cookie 或模型服务的完整配置。开启调试信息后也只输出脱敏的判断摘要。
+默认日志不会记录完整聊天内容、判断原因、API 密钥、访问令牌、Cookie 或模型服务的完整配置。开启调试信息后也只输出脱敏的判断摘要。
 
 ## 工作原理（简版）
 
 1. 收到普通聊天消息后，插件读取当前会话最近几条对话。
 2. 独立判断模型只判断 `END`、`CONTINUE` 或 `UNCERTAIN`，不会替用户生成回复。
-3. 只有高可信度 `END` 会调用 `event.stop_event()`，Bot 保持真正的沉默。
+3. 只有高可信度 `END` 会调用 `event.stop_event()`，机器人保持真正的沉默。
 4. 其他结果和所有异常都不修改 AstrBot 原有流程。
-5. Bot 实际发送成功的内容会通过 AstrBot 官方发送后 Hook 加入会话历史。
+5. 机器人实际发送成功的内容会通过 AstrBot 官方发送后钩子加入会话历史。
 
 同一会话会按顺序处理，不同会话互不阻塞；历史、消息去重记录和会话锁都有数量或时间限制，不会无限增长。
 
@@ -164,7 +164,7 @@ https://github.com/utrgdfg/astrbot_plugin_conversation_closer
 ## 兼容性与限制
 
 - 支持 AstrBot `>=4.24.2,<5`。
-- CI 覆盖 Python 3.12、3.13、3.14，并检查 AstrBot `v4.24.2` 与官方主线 API。
+- 持续集成覆盖 Python 3.12、3.13、3.14，并检查 AstrBot `v4.24.2` 与官方主线接口。
 - 目前尚未完成真实平台适配器的端到端测试，因此暂不声明特定平台支持范围。
 - 群聊中的交流边界更复杂，默认关闭并视为实验功能。
 - 第一版不理解图片、语音、视频或文件内容，只记录轻量占位符。
@@ -175,7 +175,7 @@ https://github.com/utrgdfg/astrbot_plugin_conversation_closer
 
 ### 安装后没有任何变化？
 
-运行 `/closer status`，确认已经选择对话判断模型。模型不可用时，插件会主动放行，所以 Bot 仍会像未安装时一样回复。
+运行 `/closer status`，确认已经选择对话判断模型。模型不可用时，插件会主动放行，所以机器人仍会像未安装时一样回复。
 
 ### 为什么没有发送“对话已结束”？
 
@@ -199,7 +199,7 @@ pytest
 bandit -q -r . -x ./tests
 ```
 
-测试不会调用真实 LLM，也不需要 API Key。回归语料位于 [`tests/cases/conversation_cases.json`](tests/cases/conversation_cases.json)，安全问题请按 [`SECURITY.md`](SECURITY.md) 私下报告。
+测试不会调用真实大语言模型，也不需要 API 密钥。回归语料位于 [`tests/cases/conversation_cases.json`](tests/cases/conversation_cases.json)，安全问题请按 [`SECURITY.md`](SECURITY.md) 私下报告。
 
 ## 更新与许可证
 
@@ -210,4 +210,4 @@ bandit -q -r . -x ./tests
 
 本插件为独立实现，没有复制或修改 should-I-respond 类插件代码。项目图标由维护者提供，不自动适用源码 MIT 许可证；再分发前请阅读 [`ASSET_LICENSE.md`](ASSET_LICENSE.md)。
 
-[![Moe Counter](https://mayu.due.moe/get/@utrgdfg-astrbot_plugin_conversation_closer?theme=booru-lewd)](https://github.com/utrgdfg/astrbot_plugin_conversation_closer)
+[![萌娘计数器](https://mayu.due.moe/get/@utrgdfg-astrbot_plugin_conversation_closer?theme=booru-lewd)](https://github.com/utrgdfg/astrbot_plugin_conversation_closer)
