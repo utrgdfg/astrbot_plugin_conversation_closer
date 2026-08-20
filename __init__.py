@@ -1,3 +1,3 @@
-"""Conversation Closer plugin package."""
+"""对话自然收尾插件包。"""
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
