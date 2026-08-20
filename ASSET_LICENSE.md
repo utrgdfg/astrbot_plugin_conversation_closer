@@ -1,8 +1,5 @@
-# Asset licensing
+# 资源授权说明
 
-The source code in this repository is licensed under the MIT License.
+本仓库的源代码采用 MIT 许可证。
 
-`logo.png` was supplied by the project maintainer and is stored separately from the source-code
-license grant. No copyright ownership or redistribution license for that image is asserted by this
-repository. The maintainer must confirm that they have permission to publish and redistribute the
-image before submitting the plugin to a public marketplace or creating a release archive.
+项目图标由项目维护者提供，其授权不包含在源代码的 MIT 许可证范围内。本仓库不对该图片主张版权，也不代表自动授予再分发许可。在向公开插件市场提交本插件或制作发布压缩包之前，维护者必须确认自己拥有发布和再分发该图片的权利。

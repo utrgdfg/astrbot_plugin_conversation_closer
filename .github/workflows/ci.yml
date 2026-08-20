@@ -1,4 +1,4 @@
-name: CI
+name: 持续集成
 
 on:
   push:
@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   quality:
+    name: "质量检查（Python ${{ matrix.python-version }}）"
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -16,31 +17,32 @@ jobs:
         python-version: ["3.12", "3.13", "3.14"]
 
     steps:
-      - name: Check out repository
+      - name: 检出仓库
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: 配置 Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
 
-      - name: Install development dependencies
+      - name: 安装开发依赖
         run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
 
-      - name: Compile Python sources
+      - name: 编译 Python 源码
         run: python -m compileall -q .
 
-      - name: Ruff
+      - name: Ruff 代码检查
         run: ruff check .
 
-      - name: Tests
+      - name: 运行测试
         run: pytest
 
-      - name: Bandit
+      - name: Bandit 安全检查
         run: bandit -q -r . -x ./tests
 
   astrbot-api-contract:
+    name: "AstrBot 接口契约（${{ matrix.astrbot-ref }}）"
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -48,20 +50,20 @@ jobs:
         astrbot-ref: ["v4.24.2", "master"]
 
     steps:
-      - name: Check out plugin
+      - name: 检出插件
         uses: actions/checkout@v4
 
-      - name: Check out AstrBot source
+      - name: 检出 AstrBot 源码
         uses: actions/checkout@v4
         with:
           repository: AstrBotDevs/AstrBot
           ref: ${{ matrix.astrbot-ref }}
           path: .astrbot-source
 
-      - name: Set up Python
+      - name: 配置 Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      - name: Verify AstrBot API source contract
+      - name: 验证 AstrBot 接口源码契约
         run: python scripts/check_astrbot_api.py .astrbot-source

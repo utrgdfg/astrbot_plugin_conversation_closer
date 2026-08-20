@@ -1,51 +1,50 @@
-# Release checklist
+# 发布检查清单
 
-## Repository and identity
+## 仓库与插件身份
 
-- [x] `metadata.yaml` identity is `utrgdfg/astrbot_plugin_conversation_closer`.
-- [x] Version is `0.2.0` in package, metadata, project metadata, and changelog.
-- [x] Repository URL uses HTTPS GitHub.
-- [x] MIT license, security policy, contribution guide, changelog, and a 256×256 root `logo.png` are present.
-- [ ] Confirm redistribution rights for the user-supplied `logo.png` before marketplace submission.
-- [ ] Confirm the GitHub repository is public before marketplace submission.
-- [ ] Add a concise GitHub description and relevant repository topics.
+- [x] `metadata.yaml` 中的插件身份为 `utrgdfg/astrbot_plugin_conversation_closer`。
+- [x] 包、插件元数据、项目元数据和更新日志中的版本均为 `0.2.1`。
+- [x] 仓库地址使用 GitHub HTTPS 链接。
+- [x] 已提供 MIT 许可证、安全策略、贡献指南、更新日志和根目录 256×256 项目图标。
+- [ ] 提交插件市场前，确认用户提供的项目图标允许再分发。
+- [x] GitHub 仓库已公开。
+- [x] GitHub 仓库已填写简短说明和相关主题。
 
-## Compatibility and live validation
+## 兼容性与实际验证
 
-- [x] Automated tests cover Python 3.12-compatible code and CI targets 3.12–3.14.
-- [x] Minimum AstrBot version is `>=4.24.2,<5`, based on LLM API availability and
-      persistent `stop_event()` propagation behavior.
-- [x] `support_platforms` is intentionally omitted until real adapter tests are complete.
-- [ ] Install the plugin into a clean current AstrBot instance from the GitHub URL.
-- [ ] Select a real low-cost Judge Provider and test strict JSON output.
-- [ ] Run private-chat smoke tests on each platform that will be declared.
-- [ ] Run group-chat tests before enabling or declaring experimental group support.
+- [x] 自动化测试覆盖兼容 Python 3.12 的代码，持续集成覆盖 Python 3.12–3.14。
+- [x] AstrBot 最低版本为 `>=4.24.2,<5`，依据是模型调用接口及 `stop_event()` 的持续传播行为。
+- [x] 在完成真实适配器测试前，有意不声明 `support_platforms`。
+- [ ] 使用 GitHub 地址在全新的当前版本 AstrBot 中安装插件。
+- [ ] 选择真实的低成本对话判断模型，测试严格 JSON 输出。
+- [ ] 在准备声明支持的每个平台上执行私聊冒烟测试。
+- [ ] 启用或声明实验性群聊支持前执行群聊测试。
 
-## Behavior and safety
+## 行为与安全
 
-- [x] Only `END` plus the configured confidence threshold can call `stop_event()`.
-- [x] `CONTINUE`, `UNCERTAIN`, missing providers, timeouts, invalid JSON, and exceptions fail open.
-- [x] No keyword-only stop path, random reply probability, proactive reply, or reply-desire logic exists.
-- [x] Session history, dedupe state, and locks are bounded and cleaned by TTL/termination.
-- [x] Commands bypass the Judge and do not pollute conversation history.
-- [x] Privacy, Provider cost, Prompt Injection, logging, and known limitations are documented.
-- [ ] Review Judge results against real conversational traffic without logging private full histories.
+- [x] 只有 `END` 且达到配置的可信度门槛时才能调用 `stop_event()`。
+- [x] `CONTINUE`、`UNCERTAIN`、模型未配置、超时、JSON 无效及异常均自动放行。
+- [x] 不存在仅凭关键词停止、随机回复概率、主动回复或回复欲望逻辑。
+- [x] 会话历史、去重状态和锁均有边界，并通过超时或插件终止进行清理。
+- [x] 管理命令绕过对话判断，且不会污染聊天历史。
+- [x] 已说明隐私、模型费用、提示词注入、日志及已知限制。
+- [ ] 使用真实交流验证判断结果，且不得记录完整私人聊天历史。
 
-## Quality gates
+## 质量门槛
 
-- [x] Python compilation succeeds.
-- [x] Ruff succeeds.
-- [x] Pytest succeeds without real LLM or credentials.
-- [x] Bandit succeeds.
-- [x] Secret, local-path, dangerous execution, and hidden-network scans return zero findings.
-- [ ] Confirm GitHub Actions succeeds after push.
+- [x] Python 语法编译通过。
+- [x] Ruff 检查通过。
+- [x] Pytest 在不调用真实模型、不使用凭据的情况下通过。
+- [x] Bandit 安全检查通过。
+- [x] 硬编码密钥、本地路径、危险执行和隐藏网络请求检查无问题。
+- [x] 推送后 GitHub Actions 全部通过。
 
-## Publish
+## 发布
 
-- [ ] Merge the reviewed branch into the repository default branch.
-- [ ] Create signed or annotated tag `v0.2.0` after the merge commit is final.
-- [ ] Create a GitHub release using the matching changelog entry.
-- [ ] Register/sign in to AstrBot Cloud and open the official plugin publish page.
-- [ ] Submit the public repository URL and verify `author`, `name`, and `version` remain unchanged.
-- [ ] Confirm the marketplace package is below the official 16 MB limit.
-- [ ] Reinstall the marketplace build and repeat a private-chat smoke test.
+- [ ] 将审核后的任务分支合并到仓库默认分支。
+- [ ] 在最终合并提交上创建注解标签 `v0.2.1`。
+- [ ] 使用对应更新日志创建 GitHub Release。
+- [ ] 注册或登录 AstrBot Cloud，打开官方插件发布页面。
+- [ ] 提交公开仓库地址，并再次确认 `author`、`name` 和 `version` 未变化。
+- [ ] 确认插件市场安装包低于官方 16 MB 限制。
+- [ ] 从插件市场重新安装，并再次执行私聊冒烟测试。

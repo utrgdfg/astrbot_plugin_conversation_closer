@@ -1,4 +1,4 @@
-"""Static source contract check for the AstrBot APIs used by this plugin."""
+"""静态检查本插件使用的 AstrBot 源码接口契约。"""
 
 from __future__ import annotations
 
@@ -8,12 +8,12 @@ from pathlib import Path
 
 
 class ContractError(RuntimeError):
-    """Raised when a required AstrBot source contract is absent."""
+    """所需的 AstrBot 源码契约不存在时抛出。"""
 
 
 def parse(path: Path) -> ast.Module:
     if not path.is_file():
-        raise ContractError(f"missing source file: {path}")
+        raise ContractError(f"缺少源码文件：{path}")
     return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
@@ -21,14 +21,14 @@ def class_node(module: ast.Module, name: str) -> ast.ClassDef:
     for node in module.body:
         if isinstance(node, ast.ClassDef) and node.name == name:
             return node
-    raise ContractError(f"missing class: {name}")
+    raise ContractError(f"缺少类：{name}")
 
 
 def method_node(owner: ast.ClassDef, name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
     for node in owner.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
             return node
-    raise ContractError(f"missing method: {owner.name}.{name}")
+    raise ContractError(f"缺少方法：{owner.name}.{name}")
 
 
 def function_names(module: ast.Module) -> set[str]:
@@ -47,14 +47,14 @@ def check(root: Path) -> None:
     for marker in ("object", "items"):
         if marker not in schema_contract:
             raise ContractError(
-                f"AstrBotConfig grouped object schema contract changed: {marker}"
+                f"AstrBotConfig 分组对象配置契约已变化：{marker}"
             )
 
     context_module = parse(root / "astrbot/core/star/context.py")
     context = class_node(context_module, "Context")
     llm_generate = method_node(context, "llm_generate")
     if not isinstance(llm_generate, ast.AsyncFunctionDef):
-        raise ContractError("Context.llm_generate is not async")
+        raise ContractError("Context.llm_generate 不再是异步方法")
     keyword_args = {argument.arg for argument in llm_generate.args.kwonlyargs}
     required_llm_args = {
         "chat_provider_id",
@@ -64,7 +64,7 @@ def check(root: Path) -> None:
         "contexts",
     }
     if not required_llm_args <= keyword_args or llm_generate.args.kwarg is None:
-        raise ContractError("Context.llm_generate keyword contract changed")
+        raise ContractError("Context.llm_generate 关键字参数契约已变化")
 
     event_module = parse(root / "astrbot/core/platform/astr_message_event.py")
     event = class_node(event_module, "AstrMessageEvent")
@@ -86,7 +86,7 @@ def check(root: Path) -> None:
     }
     missing_event_methods = required_event_methods - available_event_methods
     if missing_event_methods:
-        raise ContractError(f"AstrMessageEvent methods changed: {missing_event_methods}")
+        raise ContractError(f"AstrMessageEvent 方法契约已变化：{missing_event_methods}")
 
     register_module = parse(root / "astrbot/core/star/register/star_handler.py")
     required_registers = {
@@ -96,7 +96,7 @@ def check(root: Path) -> None:
         "register_on_decorating_result",
     }
     if missing_registers := required_registers - function_names(register_module):
-        raise ContractError(f"plugin registrations changed: {missing_registers}")
+        raise ContractError(f"插件注册接口已变化：{missing_registers}")
 
     filter_api = (root / "astrbot/api/event/filter/__init__.py").read_text(encoding="utf-8")
     for public_name in (
@@ -106,33 +106,33 @@ def check(root: Path) -> None:
         "on_decorating_result",
     ):
         if public_name not in filter_api:
-            raise ContractError(f"filter API no longer exposes {public_name}")
+            raise ContractError(f"事件过滤接口不再公开：{public_name}")
 
     handler_source = (root / "astrbot/core/star/star_handler.py").read_text(
         encoding="utf-8"
     )
     if 'self._handlers.sort(key=lambda h: -h.extras_configs["priority"])' not in handler_source:
-        raise ContractError("descending handler priority contract changed")
+        raise ContractError("处理器优先级降序执行契约已变化")
 
     waking_source = (root / "astrbot/core/pipeline/waking_check/stage.py").read_text(
         encoding="utf-8"
     )
     for marker in ("activated_handlers", "is_at_or_wake_command"):
         if marker not in waking_source:
-            raise ContractError(f"WakingCheck contract changed: {marker}")
+            raise ContractError(f"WakingCheck 契约已变化：{marker}")
 
 
 def main() -> int:
     if len(sys.argv) != 2:
-        print("usage: check_astrbot_api.py PATH_TO_ASTRBOT")
+        print("用法：check_astrbot_api.py ASTRBOT源码路径")
         return 2
     root = Path(sys.argv[1]).resolve()
     try:
         check(root)
     except (ContractError, OSError, SyntaxError) as exc:
-        print(f"AstrBot API contract check failed: {exc}")
+        print(f"AstrBot 接口契约检查失败：{exc}")
         return 1
-    print(f"AstrBot API contract check passed: {root}")
+    print(f"AstrBot 接口契约检查通过：{root}")
     return 0
 
 

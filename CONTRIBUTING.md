@@ -1,14 +1,12 @@
-# Contributing
+# 参与贡献
 
-Contributions are welcome when they preserve the plugin's narrow semantic contract: classify
-whether the current exchange is already complete. Do not add random reply probabilities, reply
-desire, mood, proactive messaging, or keyword-only suppression.
+欢迎参与贡献，但所有改动都必须保持插件的核心语义：只判断当前交流是否已经自然完成。请勿加入随机回复概率、回复欲望、情绪状态、主动发言或仅凭关键词停止回复的逻辑。
 
-## Development
+## 开发要求
 
-1. Use Python 3.12 or newer.
-2. Install the development extras: `python -m pip install -e ".[dev]"`.
-3. Run `ruff check .` and `pytest` before opening a pull request.
-4. Add or update cases in `tests/cases/conversation_cases.json` for prompt changes.
+1. 使用 Python 3.12 或更高版本。
+2. 安装开发依赖：`python -m pip install -e ".[dev]"`。
+3. 提交拉取请求前运行 `ruff check .` 和 `pytest`。
+4. 修改判断提示词时，在 `tests/cases/conversation_cases.json` 中增加或更新测试场景。
 
-LLM calls in tests must always be mocked. Never commit credentials or private chat logs.
+测试中的模型调用必须始终使用模拟实现。禁止提交凭据、密钥或真实的私人聊天记录。

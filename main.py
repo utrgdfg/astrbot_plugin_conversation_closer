@@ -40,10 +40,10 @@ class ConversationCloserPlugin(Star):
                 save_config = getattr(config, "save_config", None)
                 if callable(save_config):
                     save_config()
-                logger.info("[ConversationCloser] migrated legacy plugin configuration")
+                logger.info("[ConversationCloser] 已迁移旧版插件配置")
         except Exception as exc:  # noqa: BLE001 - configuration remains fail-open
             logger.warning(
-                "[ConversationCloser] configuration migration was not saved: %s",
+                "[ConversationCloser] 配置迁移未能保存：%s",
                 type(exc).__name__,
             )
         config_mapping: Mapping[str, Any] = config
@@ -65,7 +65,7 @@ class ConversationCloserPlugin(Star):
             self.judge,
         )
         logger.info(
-            "[ConversationCloser] initialized: enabled=%s private=%s group=%s",
+            "[ConversationCloser] 已初始化：启用=%s 私聊=%s 群聊=%s",
             self.settings.enabled,
             self.settings.private_enabled,
             self.settings.group_enabled,
@@ -160,14 +160,14 @@ class ConversationCloserPlugin(Star):
         if not self.settings.debug_log or result is None:
             return
         logger.info(
-            "[ConversationCloser] session=%s decision=%s confidence=%.3f "
-            "elapsed=%.3fs duplicate=%s error=%s",
+            "[ConversationCloser] 会话=%s 判断=%s 可信度=%.3f "
+            "耗时=%.3f秒 重复=%s 错误=%s",
             self._masked_session(session_id),
             result.decision.value,
             result.confidence,
             result.elapsed_seconds,
             duplicate,
-            result.error_code or "none",
+            result.error_code or "无",
         )
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=INTERCEPT_PRIORITY)
@@ -201,7 +201,7 @@ class ConversationCloserPlugin(Star):
                 event.stop_event()
         except Exception as exc:  # noqa: BLE001 - final fail-open boundary
             logger.warning(
-                "[ConversationCloser] event processing failed open: %s",
+                "[ConversationCloser] 消息处理异常，已正常放行：%s",
                 type(exc).__name__,
             )
 
@@ -223,7 +223,7 @@ class ConversationCloserPlugin(Star):
                 event.set_extra(OUTGOING_SNAPSHOT_KEY, content)
         except Exception as exc:  # noqa: BLE001 - decoration must remain non-blocking
             logger.warning(
-                "[ConversationCloser] outgoing history snapshot failed: %s",
+                "[ConversationCloser] 机器人回复快照记录失败：%s",
                 type(exc).__name__,
             )
 
@@ -253,7 +253,7 @@ class ConversationCloserPlugin(Star):
             )
         except Exception as exc:  # noqa: BLE001 - post-send must not break pipeline
             logger.warning(
-                "[ConversationCloser] assistant history recording failed: %s",
+                "[ConversationCloser] 机器人回复历史记录失败：%s",
                 type(exc).__name__,
             )
 
@@ -319,4 +319,4 @@ class ConversationCloserPlugin(Star):
         """Release all caches; this plugin intentionally creates no background task."""
 
         await self.store.close()
-        logger.info("[ConversationCloser] terminated and in-memory history cleared")
+        logger.info("[ConversationCloser] 已终止并清空内存会话历史")

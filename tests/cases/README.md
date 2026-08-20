@@ -1,21 +1,14 @@
-# Judge case corpus
+# 对话判断测试语料
 
-`conversation_cases.json` is a versioned semantic corpus for Judge Prompt evaluation. It includes
-natural confirmations, complete answers, pending upstream tasks, questions, corrections, emotion,
-Prompt Injection, and ambiguous exchanges.
+`conversation_cases.json` 是用于评估判断提示词的版本化语义语料库，包含自然确认、完整回答、仍有上游任务、提问、纠正、情绪表达、提示词注入和模棱两可的交流。
 
-The default CI suite deliberately does **not** call a paid or external LLM. It verifies:
+默认持续集成测试明确**不会**调用收费或外部模型，只验证：
 
-- corpus shape and category coverage;
-- preservation of the latest user message in the bounded Judge payload;
-- strict three-state orchestration when a mocked Judge returns each expected label;
-- the rule that only high-confidence `END` may stop an event.
+- 语料格式及场景分类覆盖；
+- 受限判断上下文中仍保留最新用户消息；
+- 模拟判断模型返回各个预期标签时，三态流程严格按照约定执行；
+- 只有高可信度的 `END` 才能停止事件。
 
-It does not claim that a real model will produce the expected label. Before changing
-`SYSTEM_PROMPT` or releasing with a new recommended Provider, evaluate every case against that
-Provider with temperature set as low as the Provider actually supports, record the model/version,
-and manually review all mismatches. Any false `END` is release-blocking; `UNCERTAIN` is treated as
-`CONTINUE`.
+这些测试并不声称真实模型一定会输出预期标签。修改 `SYSTEM_PROMPT` 或推荐新的模型服务前，应使用该模型服务逐项评估全部场景，将温度设置为服务实际支持的最低值，记录模型及版本，并人工检查所有不一致结果。任何错误的 `END` 都会阻断发布；`UNCERTAIN` 始终按照 `CONTINUE` 处理。
 
-Never replace this evaluation with keyword heuristics inside the plugin or commit real private
-conversations to the corpus.
+不得用插件内部的关键词判断替代这套评估，也不得把真实私人对话提交到语料库。
