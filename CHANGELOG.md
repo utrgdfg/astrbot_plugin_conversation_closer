@@ -1,31 +1,27 @@
-# Changelog
+# 更新日志
 
-All notable changes follow [Semantic Versioning](https://semver.org/).
+本项目的所有重要变更均遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
 ## [0.2.0] - 2026-08-20
 
-### Changed
+### 变更
 
-- Simplified the plugin display name and user-facing terminology.
-- Grouped WebUI settings into basic controls, judgement, conversation history,
-  and advanced sections.
-- Added a one-time, versioned migration that preserves existing flat settings
-  without allowing stale compatibility values to overwrite later WebUI changes.
-- Simplified command output and moved the clickable Mayu counter to the end of
-  the README.
+- 简化插件展示名称和面向用户的术语。
+- 将管理面板配置整理为基本开关、判断设置、对话记录和高级设置四个分区。
+- 增加带版本标记的一次性配置迁移：保留旧版平铺配置，同时防止兼容值覆盖用户之后在管理面板中保存的新设置。
+- 简化管理命令输出，并将可点击的 Mayu 萌娘计数器移到 README 末尾。
 
-### Quality
+### 质量
 
-- Added grouped-setting, legacy-migration, WebUI-layout, and README regression
-  coverage.
-- Extended the AstrBot source contract check to cover grouped object schemas.
+- 增加配置分组、旧配置迁移、管理面板布局和 README 的回归测试。
+- 扩展 AstrBot 源码契约检查，覆盖分组对象配置格式。
 
 ## [0.1.0] - 2026-08-16
 
-### Added
+### 新增
 
-- Three-state LLM judge (`END`, `CONTINUE`, `UNCERTAIN`) with strict JSON validation.
-- Fail-open handling for missing providers, timeouts, malformed output, and internal errors.
-- Session-isolated bounded histories, message deduplication, per-session locks, and TTL cleanup.
-- Silent pre-LLM interception, post-send assistant history capture, and `/closer` commands.
-- Privacy documentation, regression dataset, automated tests, linting, and security checks.
+- 提供 `END`、`CONTINUE`、`UNCERTAIN` 三态对话判断，并严格校验 JSON 输出。
+- 对模型未配置、超时、返回格式错误和插件内部异常实行自动放行。
+- 提供会话隔离的有界历史、消息去重、每会话独立锁和超时清理。
+- 在主聊天模型调用前静默拦截，并在消息发送后记录机器人回复；同时提供 `/closer` 管理命令。
+- 提供隐私说明、回归测试语料、自动化测试、代码检查和安全检查。
