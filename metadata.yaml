@@ -4,7 +4,7 @@ short_desc: 判断对话是否已经自然结束，避免机器人在交流结�
 desc: >
   根据最近几条消息判断当前交流是否已经说完。
   只有非常确定时才让机器人保持沉默；无法判断或出现异常时仍会正常回复。
-version: 0.1.0
+version: 0.2.0
 author: utrgdfg
 repo: https://github.com/utrgdfg/astrbot_plugin_conversation_closer
 astrbot_version: ">=4.24.2,<5"
