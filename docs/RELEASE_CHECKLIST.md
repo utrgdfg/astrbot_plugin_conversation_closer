@@ -3,7 +3,7 @@
 ## Repository and identity
 
 - [x] `metadata.yaml` identity is `utrgdfg/astrbot_plugin_conversation_closer`.
-- [x] Version is `0.1.0` in package, metadata, project metadata, and changelog.
+- [x] Version is `0.2.0` in package, metadata, project metadata, and changelog.
 - [x] Repository URL uses HTTPS GitHub.
 - [x] MIT license, security policy, contribution guide, changelog, and a 256×256 root `logo.png` are present.
 - [ ] Confirm redistribution rights for the user-supplied `logo.png` before marketplace submission.
@@ -43,7 +43,7 @@
 ## Publish
 
 - [ ] Merge the reviewed branch into the repository default branch.
-- [ ] Create signed or annotated tag `v0.1.0` after the merge commit is final.
+- [ ] Create signed or annotated tag `v0.2.0` after the merge commit is final.
 - [ ] Create a GitHub release using the matching changelog entry.
 - [ ] Register/sign in to AstrBot Cloud and open the official plugin publish page.
 - [ ] Submit the public repository URL and verify `author`, `name`, and `version` remain unchanged.

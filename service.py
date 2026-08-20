@@ -106,7 +106,7 @@ class ConversationCloserService:
                     judged = False
                 elif not self.settings.judge_provider_id:
                     result = JudgeResult.fail_open(
-                        "Judge Provider 未配置，已正常放行",
+                        "未选择对话判断模型，消息已正常放行",
                         error_code="provider_not_configured",
                     )
                     judged = False

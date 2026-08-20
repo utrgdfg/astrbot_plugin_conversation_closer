@@ -6,7 +6,7 @@ import hashlib
 import hmac
 import secrets
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableMapping
 from typing import Any
 
 from astrbot.api import AstrBotConfig, logger
@@ -18,7 +18,7 @@ from .judge import LLMJudge
 from .message_utils import extract_message_chain
 from .models import JudgeResult
 from .service import ConversationCloserService, UserMessage
-from .settings import PluginSettings
+from .settings import PluginSettings, migrate_legacy_config
 
 # Positive priorities run first. AstrBot's built-ins reserve sys.maxsize values;
 # 100 intentionally runs before ordinary priority-0 plugin handlers without
@@ -35,6 +35,17 @@ class ConversationCloserPlugin(Star):
     def __init__(self, context: Context, config: AstrBotConfig) -> None:
         super().__init__(context)
         self.config = config
+        try:
+            if isinstance(config, MutableMapping) and migrate_legacy_config(config):
+                save_config = getattr(config, "save_config", None)
+                if callable(save_config):
+                    save_config()
+                logger.info("[ConversationCloser] migrated legacy plugin configuration")
+        except Exception as exc:  # noqa: BLE001 - configuration remains fail-open
+            logger.warning(
+                "[ConversationCloser] configuration migration was not saved: %s",
+                type(exc).__name__,
+            )
         config_mapping: Mapping[str, Any] = config
         self.settings = PluginSettings.from_mapping(config_mapping)
         self._log_id_key = secrets.token_bytes(32)
@@ -258,16 +269,19 @@ class ConversationCloserPlugin(Star):
 
         session_id = self._session_id(event)
         history = await self.store.snapshot(session_id) if session_id else ()
-        provider = self.settings.judge_provider_id or "未配置（Fail-open）"
+        provider = self.settings.judge_provider_id or "未选择（消息会正常放行）"
+        enabled = "已开启" if self.settings.enabled else "已关闭"
+        private = "已开启" if self.settings.private_enabled else "已关闭"
+        group = "已开启" if self.settings.group_enabled else "已关闭"
         yield event.plain_result(
-            "Conversation Closer 状态\n"
-            f"- enabled: {self.settings.enabled}\n"
-            f"- private_enabled: {self.settings.private_enabled}\n"
-            f"- group_enabled: {self.settings.group_enabled}（实验）\n"
-            f"- judge_provider: {provider}\n"
-            f"- history_limit: {self.settings.history_limit}\n"
-            f"- confidence_threshold: {self.settings.confidence_threshold:.2f}\n"
-            f"- current_history: {len(history)}"
+            "对话自然收尾状态\n"
+            f"- 插件：{enabled}\n"
+            f"- 私聊：{private}\n"
+            f"- 群聊（实验）：{group}\n"
+            f"- 对话判断模型：{provider}\n"
+            f"- 参考最近消息数：{self.settings.history_limit}\n"
+            f"- 结束判断门槛：{self.settings.confidence_threshold:.2f}\n"
+            f"- 当前会话记录：{len(history)} 条"
         )
 
     @closer.command("clear")
@@ -285,15 +299,20 @@ class ConversationCloserPlugin(Star):
         session_id = self._session_id(event)
         result = await self.store.last_judge(session_id) if session_id else None
         if result is None:
-            yield event.plain_result("当前会话还没有 Judge 结果。")
+            yield event.plain_result("当前会话还没有判断结果。")
             return
+        decision_labels = {
+            "END": "对话已结束",
+            "CONTINUE": "继续正常回复",
+            "UNCERTAIN": "无法确定，正常放行",
+        }
         yield event.plain_result(
-            "最近一次 Judge\n"
-            f"- decision: {result.decision.value}\n"
-            f"- confidence: {result.confidence:.3f}\n"
-            f"- reason: {result.reason}\n"
-            f"- elapsed: {result.elapsed_seconds:.3f}s\n"
-            f"- fail_open: {bool(result.error_code)}"
+            "最近一次判断\n"
+            f"- 结果：{decision_labels[result.decision.value]}\n"
+            f"- 可信度：{result.confidence:.3f}\n"
+            f"- 原因：{result.reason}\n"
+            f"- 耗时：{result.elapsed_seconds:.3f} 秒\n"
+            f"- 异常放行：{'是' if result.error_code else '否'}"
         )
 
     async def terminate(self) -> None:

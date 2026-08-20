@@ -1,10 +1,10 @@
 name: astrbot_plugin_conversation_closer
-display_name: 对话自然收尾 / Conversation Closer
-short_desc: 使用独立 LLM 判断交流是否自然闭环，避免 Bot 为回复而回复。
+display_name: 对话自然收尾
+short_desc: 判断对话是否已经自然结束，避免机器人在交流结束后继续无意义回复。
 desc: >
-  使用用户选择的独立 LLM Provider 判断当前一轮交流是否已经自然闭环。
-  仅在高置信度 END 时静默停止默认回复；所有不确定和异常情况均正常放行。
-version: 0.1.0
+  根据最近几条消息判断当前交流是否已经说完。
+  只有非常确定时才让机器人保持沉默；无法判断或出现异常时仍会正常回复。
+version: 0.2.0
 author: utrgdfg
 repo: https://github.com/utrgdfg/astrbot_plugin_conversation_closer
 astrbot_version: ">=4.24.2,<5"
