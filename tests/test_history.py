@@ -48,6 +48,11 @@ async def test_message_id_deduplicates_history_and_judge() -> None:
             max_context_chars=6000,
         ),
     )
+    await service.record_assistant(
+        session_id="session",
+        content="出去买点吃的吧",
+        timestamp=0,
+    )
     incoming = UserMessage("session", "same-id", "可以", "可以", 1, True, False)
     first, second = await asyncio.gather(
         service.process_user(incoming),
@@ -58,7 +63,7 @@ async def test_message_id_deduplicates_history_and_judge() -> None:
     assert first.should_stop is True
     assert second.should_stop is True
     assert {first.duplicate, second.duplicate} == {False, True}
-    assert len(await store.snapshot("session")) == 1
+    assert len(await store.snapshot("session")) == 2
 
 
 @pytest.mark.asyncio
@@ -94,6 +99,39 @@ async def test_same_session_concurrency_preserves_order() -> None:
     assert len(seen_latest) == 2
     assert "first" in seen_latest[0]
     assert "first" in seen_latest[1] and "second" in seen_latest[1]
+
+
+@pytest.mark.asyncio
+async def test_stored_content_truncation_can_only_downgrade_end() -> None:
+    async def generate(system_prompt: str, prompt: str) -> str:
+        del system_prompt
+        assert '"context_complete":false' in prompt
+        return '{"decision":"END","confidence":0.99,"reason":"看似完成"}'
+
+    settings = PluginSettings(judge_provider_id="judge", max_message_chars=40)
+    store = SessionStore(history_limit=10, ttl_seconds=3600)
+    service = ConversationCloserService(
+        settings,
+        store,
+        LLMJudge(
+            generate,
+            timeout_seconds=1,
+            max_message_chars=40,
+            max_context_chars=6000,
+        ),
+    )
+    await service.record_assistant(
+        session_id="s",
+        content="为了继续完成原始任务，请先提供必要信息。" * 10,
+        timestamp=0,
+    )
+    outcome = await service.process_user(
+        UserMessage("s", "1", "已经提供", "已经提供", 1, True, False)
+    )
+    assert outcome.should_stop is False
+    assert outcome.result is not None
+    assert outcome.result.decision is Decision.UNCERTAIN
+    assert outcome.result.error_code == "incomplete_context"
 
 
 @pytest.mark.asyncio

@@ -244,6 +244,11 @@ async def test_high_confidence_end_stops_event_silently() -> None:
     )
     plugin = ConversationCloserPlugin(context, plugin_config())
     event = FakeEvent("可以")
+    await plugin.service.record_assistant(
+        session_id=event.unified_msg_origin,
+        content="出去买点吃的吧",
+        timestamp=0,
+    )
     await plugin.on_message(event)
 
     assert event._stopped is True
@@ -260,6 +265,11 @@ async def test_low_confidence_end_continues() -> None:
     )
     plugin = ConversationCloserPlugin(context, plugin_config())
     event = FakeEvent("可以")
+    await plugin.service.record_assistant(
+        session_id=event.unified_msg_origin,
+        content="出去买点吃的吧",
+        timestamp=0,
+    )
     await plugin.on_message(event)
     assert event._stopped is False
 
@@ -356,6 +366,11 @@ async def test_group_enabled_requires_explicit_bot_direction() -> None:
         private=False,
         group_id="group-1",
         bot_directed=True,
+    )
+    await plugin.service.record_assistant(
+        session_id=directed.unified_msg_origin,
+        content="那先这样",
+        timestamp=0,
     )
 
     await plugin.on_message(unrelated)
