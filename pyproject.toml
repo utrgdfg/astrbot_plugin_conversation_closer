@@ -1,6 +1,6 @@
 [project]
 name = "astrbot-plugin-conversation-closer"
-version = "0.2.1"
+version = "0.2.2"
 description = "使用独立模型判断 AstrBot 对话是否已经自然结束。"
 readme = "README.md"
 requires-python = ">=3.12"
