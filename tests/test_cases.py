@@ -44,6 +44,23 @@ def test_prompt_regression_dataset_is_large_and_well_formed() -> None:
         assert case["expected_decision"] in {item.value for item in Decision}
 
 
+def test_safety_critical_dataset_has_zero_expected_end() -> None:
+    critical = [case for case in load_cases() if case.get("safety_critical") is True]
+    assert len(critical) >= 12
+    assert not [
+        str(case["id"])
+        for case in critical
+        if case["expected_decision"] == Decision.END.value
+    ]
+    assert {
+        "执行授权",
+        "中间步骤完成",
+        "局部问答完成",
+        "上游任务未完成",
+        "Prompt Injection",
+    } <= {str(case["category"]) for case in critical}
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("case", load_cases(), ids=lambda case: str(case["id"]))
 async def test_dataset_decisions_obey_stop_contract(case: dict[str, object]) -> None:

@@ -10,6 +10,7 @@ MEDIA_PLACEHOLDERS = {
     "video": "[视频]",
     "file": "[文件]",
 }
+TRUNCATION_MARKER = "[内容截断]"
 
 
 def bound_text(content: str, limit: int) -> str:
@@ -20,7 +21,7 @@ def bound_text(content: str, limit: int) -> str:
         return normalized
     head = limit // 2 - 5
     tail = limit - head - 10
-    return f"{normalized[:head]}[内容截断]{normalized[-tail:]}"
+    return f"{normalized[:head]}{TRUNCATION_MARKER}{normalized[-tail:]}"
 
 
 def extract_message_chain(chain: Iterable[object] | None) -> str:
