@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import secrets
-import time
 from collections.abc import Mapping, MutableMapping
 from typing import Any
 
@@ -27,6 +27,8 @@ INTERCEPT_PRIORITY = 100
 AFTER_SENT_PRIORITY = 100
 OUTGOING_CAPTURE_PRIORITY = -100
 OUTGOING_SNAPSHOT_KEY = "conversation_closer.outgoing_snapshot"
+OUTGOING_RECORDED_KEY = "conversation_closer.outgoing_recorded"
+OUTGOING_RECORD_LOCK_KEY = "conversation_closer.outgoing_record_lock"
 
 
 class ConversationCloserPlugin(Star):
@@ -111,18 +113,22 @@ class ConversationCloserPlugin(Star):
         message_obj = getattr(event, "message_obj", None)
         timestamp = getattr(message_obj, "timestamp", None)
         if isinstance(timestamp, bool) or not isinstance(timestamp, (int, float)):
-            return time.time()
+            # A stable fallback keeps duplicate deliveries deduplicable even when
+            # an adapter does not provide a message timestamp.
+            return 0.0
         return float(timestamp)
 
     @staticmethod
     def _is_supported_channel(event: AstrMessageEvent) -> tuple[bool, bool]:
         try:
+            is_bot_directed = bool(
+                getattr(event, "is_at_or_wake_command", False)
+            )
             if event.is_private_chat():
-                return True, True
+                return (True, True) if is_bot_directed else (False, False)
             group_id = event.get_group_id()
         except Exception:  # noqa: BLE001 - adapter boundary
             return False, False
-        is_bot_directed = bool(getattr(event, "is_at_or_wake_command", False))
         return (True, False) if group_id and is_bot_directed else (False, False)
 
     @staticmethod
@@ -135,7 +141,10 @@ class ConversationCloserPlugin(Star):
             handlers = []
         for handler in handlers:
             event_filters = getattr(handler, "event_filters", ()) or ()
-            if any(type(item).__name__ == "CommandFilter" for item in event_filters):
+            if any(
+                type(item).__name__ in {"CommandFilter", "CommandGroupFilter"}
+                for item in event_filters
+            ):
                 return True
         # Covers the default slash prefix when handler metadata is unavailable.
         try:
@@ -239,18 +248,26 @@ class ConversationCloserPlugin(Star):
                 or self._is_command(event)
             ):
                 return
-            content = event.get_extra(OUTGOING_SNAPSHOT_KEY, "")
-            event.set_extra(OUTGOING_SNAPSHOT_KEY, None)
-            if not isinstance(content, str) or not content:
-                result = event.get_result()
-                chain = getattr(result, "chain", None)
-                content = extract_message_chain(chain)
-            if not content:
-                return
-            await self.service.record_assistant(
-                session_id=self._session_id(event),
-                content=content,
-            )
+            record_lock = event.get_extra(OUTGOING_RECORD_LOCK_KEY, None)
+            if not isinstance(record_lock, asyncio.Lock):
+                record_lock = asyncio.Lock()
+                event.set_extra(OUTGOING_RECORD_LOCK_KEY, record_lock)
+            async with record_lock:
+                if event.get_extra(OUTGOING_RECORDED_KEY, False):
+                    return
+                content = event.get_extra(OUTGOING_SNAPSHOT_KEY, "")
+                event.set_extra(OUTGOING_SNAPSHOT_KEY, None)
+                if not isinstance(content, str) or not content:
+                    result = event.get_result()
+                    chain = getattr(result, "chain", None)
+                    content = extract_message_chain(chain)
+                if not content:
+                    return
+                await self.service.record_assistant(
+                    session_id=self._session_id(event),
+                    content=content,
+                )
+                event.set_extra(OUTGOING_RECORDED_KEY, True)
         except Exception as exc:  # noqa: BLE001 - post-send must not break pipeline
             logger.warning(
                 "[ConversationCloser] 机器人回复历史记录失败：%s",
@@ -263,6 +280,7 @@ class ConversationCloserPlugin(Star):
 
         pass
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @closer.command("status")
     async def closer_status(self, event: AstrMessageEvent):
         """Show effective configuration and current cache size."""
@@ -284,6 +302,7 @@ class ConversationCloserPlugin(Star):
             f"- 当前会话记录：{len(history)} 条"
         )
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @closer.command("clear")
     async def closer_clear(self, event: AstrMessageEvent):
         """Clear only the current session's in-memory context."""
@@ -292,6 +311,7 @@ class ConversationCloserPlugin(Star):
         cleared = await self.store.clear(session_id) if session_id else 0
         yield event.plain_result(f"已清除当前会话的 {cleared} 条收尾判断上下文。")
 
+    @filter.permission_type(filter.PermissionType.ADMIN)
     @closer.command("test")
     async def closer_test(self, event: AstrMessageEvent):
         """Show the latest validated judge result for this session."""
@@ -318,5 +338,6 @@ class ConversationCloserPlugin(Star):
     async def terminate(self) -> None:
         """Release all caches; this plugin intentionally creates no background task."""
 
+        await self.judge.close()
         await self.store.close()
         logger.info("[ConversationCloser] 已终止并清空内存会话历史")
