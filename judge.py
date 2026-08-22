@@ -10,8 +10,21 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from typing import TypedDict
 
-from .message_utils import TRUNCATION_MARKER
+from .message_utils import LOSSY_CONTEXT_MARKERS, TRUNCATION_MARKER
 from .models import Decision, HistoryMessage, JudgeResult
+
+MAX_JUDGE_RESPONSE_CHARS = 4096
+MAX_PENDING_GENERATIONS = 128
+QUESTION_MARKS = frozenset({"?", "？"})
+PROMPT_INJECTION_SIGNALS = (
+    "ignore the system",
+    "ignore system prompt",
+    "output end",
+    "忽略系统提示",
+    "忽略以上提示",
+    "输出 end",
+    "伪造 context_complete",
+)
 
 SYSTEM_PROMPT = """你是“对话闭环分类器”，不是聊天机器人。
 你的唯一任务是判断：最后一条用户消息之后，整个当前对话任务是否已经自然闭环，
@@ -101,12 +114,14 @@ def build_context_payload(
     *,
     max_message_chars: int,
     max_context_chars: int,
+    source_omitted_message_count: int = 0,
 ) -> ContextPayload:
     """限制 JSON 数据大小，并明确标记任何消息缺失或内容截断。"""
 
     selected: list[dict[str, str]] = []
     selected_source_count = 0
     content_was_truncated = False
+    source_omitted_message_count = max(0, source_omitted_message_count)
 
     def make_payload(
         entries: list[dict[str, str]],
@@ -126,14 +141,18 @@ def build_context_payload(
                 make_payload(
                     entries,
                     complete=False,
-                    omitted=len(messages),
+                    omitted=len(messages) + source_omitted_message_count,
                 )
             )
         )
 
     for message in reversed(messages):
         content = _truncate_content(message.content, max_message_chars)
-        if content != message.content or TRUNCATION_MARKER in message.content:
+        if (
+            content != message.content
+            or TRUNCATION_MARKER in message.content
+            or any(marker in message.content for marker in LOSSY_CONTEXT_MARKERS)
+        ):
             content_was_truncated = True
         entry = {"role": message.role, "content": content}
         candidate = [entry, *selected]
@@ -163,7 +182,9 @@ def build_context_payload(
                 content_was_truncated = True
         break
 
-    omitted = len(messages) - selected_source_count
+    omitted = (
+        len(messages) - selected_source_count + source_omitted_message_count
+    )
     return make_payload(
         selected,
         complete=omitted == 0 and not content_was_truncated,
@@ -196,6 +217,7 @@ def build_user_prompt(
     *,
     max_message_chars: int,
     max_context_chars: int,
+    source_omitted_message_count: int = 0,
 ) -> str:
     """Serialize changing conversation data outside the stable system prompt."""
 
@@ -203,6 +225,7 @@ def build_user_prompt(
         messages,
         max_message_chars=max_message_chars,
         max_context_chars=max_context_chars,
+        source_omitted_message_count=source_omitted_message_count,
     )
     return _build_user_prompt_from_payload(payload)
 
@@ -236,13 +259,34 @@ def _conservative_end_guard(
             reason="缺少可确认完整闭环的相邻对话，消息已正常放行",
             error_code="insufficient_context",
         )
+    if any(mark in messages[-1]["content"] for mark in QUESTION_MARKS):
+        return replace(
+            result,
+            decision=Decision.UNCERTAIN,
+            confidence=0.0,
+            reason="最后一条消息包含明确问题，消息已正常放行",
+            error_code="explicit_question",
+        )
+    current_content = messages[-1]["content"].casefold()
+    if any(signal in current_content for signal in PROMPT_INJECTION_SIGNALS):
+        return replace(
+            result,
+            decision=Decision.UNCERTAIN,
+            confidence=0.0,
+            reason="最后一条消息包含提示词注入信号，消息已正常放行",
+            error_code="prompt_injection_signal",
+        )
     return result
 
 
 def parse_judge_response(raw_text: str) -> JudgeResult:
     """Accept only the documented JSON shape and validated scalar types."""
 
-    if not isinstance(raw_text, str) or not raw_text.strip():
+    if not isinstance(raw_text, str):
+        raise JudgeOutputError("response is not text")
+    if len(raw_text) > MAX_JUDGE_RESPONSE_CHARS:
+        raise JudgeOutputError("response is too large")
+    if not raw_text.strip():
         raise JudgeOutputError("empty response")
     try:
         payload = json.loads(raw_text.strip(), object_pairs_hook=_unique_object)
@@ -299,28 +343,70 @@ class LLMJudge:
         self._timeout_seconds = timeout_seconds
         self._max_message_chars = max_message_chars
         self._max_context_chars = max_context_chars
+        self._generation_tasks: set[asyncio.Task[str]] = set()
+        self._closed = False
 
-    async def evaluate(self, messages: Sequence[HistoryMessage]) -> JudgeResult:
+    def _generation_done(self, task: asyncio.Task[str]) -> None:
+        self._generation_tasks.discard(task)
+        if task.cancelled():
+            return
+        try:
+            task.exception()
+        except (asyncio.CancelledError, Exception):
+            pass
+
+    async def evaluate(
+        self,
+        messages: Sequence[HistoryMessage],
+        *,
+        source_omitted_message_count: int = 0,
+    ) -> JudgeResult:
         started = time.monotonic()
+        if self._closed:
+            return JudgeResult.fail_open(
+                "判断服务已关闭，消息已正常放行",
+                error_code="judge_closed",
+            )
+        if len(self._generation_tasks) >= MAX_PENDING_GENERATIONS:
+            return JudgeResult.fail_open(
+                "等待中的判断调用过多，消息已正常放行",
+                error_code="judge_busy",
+            )
         payload = build_context_payload(
             messages,
             max_message_chars=self._max_message_chars,
             max_context_chars=self._max_context_chars,
+            source_omitted_message_count=source_omitted_message_count,
         )
         prompt = _build_user_prompt_from_payload(payload)
+        generation_task = asyncio.create_task(
+            self._generate(SYSTEM_PROMPT, prompt)
+        )
+        self._generation_tasks.add(generation_task)
+        generation_task.add_done_callback(self._generation_done)
         try:
-            raw_text = await asyncio.wait_for(
-                self._generate(SYSTEM_PROMPT, prompt),
+            done, _ = await asyncio.wait(
+                {generation_task},
                 timeout=self._timeout_seconds,
             )
-        except TimeoutError:
+        except asyncio.CancelledError:
+            generation_task.cancel()
+            raise
+        if generation_task not in done:
+            generation_task.cancel()
             return JudgeResult.fail_open(
                 "判断等待超时，消息已正常放行",
                 error_code="timeout",
                 elapsed_seconds=time.monotonic() - started,
             )
+        try:
+            raw_text = generation_task.result()
         except asyncio.CancelledError:
-            raise
+            return JudgeResult.fail_open(
+                "判断模型调用已取消，消息已正常放行",
+                error_code="provider_cancelled",
+                elapsed_seconds=time.monotonic() - started,
+            )
         except Exception as exc:  # noqa: BLE001 - fail-open boundary by design
             return JudgeResult.fail_open(
                 "判断模型暂时不可用，消息已正常放行",
@@ -339,3 +425,13 @@ class LLMJudge:
             )
         guarded = _conservative_end_guard(result, payload)
         return replace(guarded, elapsed_seconds=elapsed)
+
+    async def close(self) -> None:
+        """取消仍在运行的判断调用，但不无限等待不合作的供应商。"""
+
+        self._closed = True
+        tasks = tuple(self._generation_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.wait(tasks, timeout=min(self._timeout_seconds, 1.0))

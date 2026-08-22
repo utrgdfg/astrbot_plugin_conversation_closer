@@ -94,19 +94,39 @@ def check(root: Path) -> None:
         "register_command_group",
         "register_event_message_type",
         "register_on_decorating_result",
+        "register_permission_type",
     }
     if missing_registers := required_registers - function_names(register_module):
         raise ContractError(f"插件注册接口已变化：{missing_registers}")
 
     filter_api = (root / "astrbot/api/event/filter/__init__.py").read_text(encoding="utf-8")
     for public_name in (
+        "PermissionType",
         "after_message_sent",
         "command_group",
         "event_message_type",
         "on_decorating_result",
+        "permission_type",
     ):
         if public_name not in filter_api:
             raise ContractError(f"事件过滤接口不再公开：{public_name}")
+
+    permission_module = parse(root / "astrbot/core/star/filter/permission.py")
+    permission_type = class_node(permission_module, "PermissionType")
+    permission_members = {
+        node.targets[0].id
+        for node in permission_type.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+    }
+    if "ADMIN" not in permission_members:
+        raise ContractError("PermissionType.ADMIN 权限契约已变化")
+    permission_filter = class_node(permission_module, "PermissionTypeFilter")
+    permission_filter_contract = ast.dump(method_node(permission_filter, "filter"))
+    for marker in ("ADMIN", "is_admin"):
+        if marker not in permission_filter_contract:
+            raise ContractError(f"管理员权限过滤契约已变化：{marker}")
 
     handler_source = (root / "astrbot/core/star/star_handler.py").read_text(
         encoding="utf-8"

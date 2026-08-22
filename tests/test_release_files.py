@@ -88,14 +88,8 @@ def test_user_facing_i18n_and_readme_layout() -> None:
             assert list(translations["config"]) == visible_sections
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    counter = (
-        "[![萌娘计数器]"
-        "(https://mayu.due.moe/get/"
-        "@utrgdfg-astrbot_plugin_conversation_closer?theme=booru-lewd)]"
-        "(https://github.com/utrgdfg/astrbot_plugin_conversation_closer)"
-    )
     assert readme.startswith("# 对话自然收尾\n")
-    assert readme.rstrip().endswith(counter)
+    assert "mayu.due.moe" not in readme
     assert "`logo.png`" not in readme
 
     chinese_headings = {
@@ -108,6 +102,12 @@ def test_user_facing_i18n_and_readme_layout() -> None:
     }
     for relative_path, heading in chinese_headings.items():
         assert (ROOT / relative_path).read_text(encoding="utf-8").startswith(heading)
+
+    release_checklist = (ROOT / "docs/RELEASE_CHECKLIST.md").read_text(
+        encoding="utf-8"
+    )
+    assert "<VERSION>" in release_checklist
+    assert "`v0.2.1`" not in release_checklist
 
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert project["project"]["description"] == (

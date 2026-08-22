@@ -12,15 +12,25 @@ from dataclasses import dataclass, field
 from .models import HistoryMessage, JudgeResult
 
 
+@dataclass(frozen=True, slots=True)
+class ProcessedMessage:
+    """一次已处理事件的去重信息，不保存额外明文。"""
+
+    content_fingerprint: bytes
+    result: JudgeResult
+    judged: bool
+
+
 @dataclass(slots=True)
 class SessionState:
     """Mutable data protected by one session-specific lock."""
 
     history: deque[HistoryMessage]
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    processed: OrderedDict[str, JudgeResult] = field(default_factory=OrderedDict)
+    processed: OrderedDict[str, ProcessedMessage] = field(default_factory=OrderedDict)
     last_judge: JudgeResult | None = None
     updated_at: float = 0.0
+    dropped_message_count: int = 0
 
 
 class SessionStore:
@@ -82,9 +92,13 @@ class SessionStore:
         self.cleanup_stale()
         state = self._get_or_create(session_id)
         async with state.lock:
+            if self._closed:
+                raise RuntimeError("session store is closed")
             state.updated_at = self._clock()
-            yield state
-            state.updated_at = self._clock()
+            try:
+                yield state
+            finally:
+                state.updated_at = self._clock()
 
     def append_message(
         self,
@@ -96,31 +110,49 @@ class SessionStore:
     ) -> None:
         if role not in {"user", "assistant"}:
             raise ValueError("unsupported history role")
+        if state.history.maxlen is not None and len(state.history) >= state.history.maxlen:
+            state.dropped_message_count += 1
         state.history.append(
             HistoryMessage(role=role, content=content, timestamp=timestamp)  # type: ignore[arg-type]
         )
 
     @staticmethod
+    def reset_history(state: SessionState) -> None:
+        """开始新的对话阶段，同时保留去重结果和最近判断。"""
+
+        state.history.clear()
+        state.dropped_message_count = 0
+
+    @staticmethod
     def get_processed(
         state: SessionState,
         message_id: str | None,
-    ) -> JudgeResult | None:
+        content_fingerprint: bytes,
+    ) -> ProcessedMessage | None:
         if not message_id:
             return None
-        result = state.processed.get(message_id)
-        if result is not None:
+        processed = state.processed.get(message_id)
+        if processed is not None and processed.content_fingerprint == content_fingerprint:
             state.processed.move_to_end(message_id)
-        return result
+            return processed
+        return None
 
     def remember_processed(
         self,
         state: SessionState,
         message_id: str | None,
+        content_fingerprint: bytes,
         result: JudgeResult,
+        *,
+        judged: bool,
     ) -> None:
         if not message_id:
             return
-        state.processed[message_id] = result
+        state.processed[message_id] = ProcessedMessage(
+            content_fingerprint=content_fingerprint,
+            result=result,
+            judged=judged,
+        )
         state.processed.move_to_end(message_id)
         while len(state.processed) > self._message_cache_limit:
             state.processed.popitem(last=False)
@@ -159,7 +191,7 @@ class SessionStore:
             return 0
         async with state.lock:
             count = len(state.history)
-            state.history.clear()
+            self.reset_history(state)
             state.processed.clear()
             state.last_judge = None
             state.updated_at = self._clock()
@@ -176,3 +208,4 @@ class SessionStore:
                 state.history.clear()
                 state.processed.clear()
                 state.last_judge = None
+                state.dropped_message_count = 0

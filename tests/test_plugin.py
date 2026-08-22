@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import sys
 import types
@@ -9,6 +10,9 @@ import pytest
 
 
 class _FilterStub:
+    class PermissionType:
+        ADMIN = "admin"
+
     class EventMessageType:
         ALL = "all"
 
@@ -57,6 +61,15 @@ class _FilterStub:
 
         return decorator
 
+    @staticmethod
+    def permission_type(*args, **kwargs):
+        del args, kwargs
+
+        def decorator(func):
+            return func
+
+        return decorator
+
 
 class _StarStub:
     def __init__(self, context) -> None:
@@ -95,7 +108,8 @@ class Image:
 
 
 class Record:
-    pass
+    def __init__(self, text: str | None = None) -> None:
+        self.text = text
 
 
 class Video:
@@ -106,8 +120,21 @@ class File:
     pass
 
 
+class Sticker:
+    pass
+
+
 class CommandFilter:
     pass
+
+
+class CommandGroupFilter:
+    pass
+
+
+class Reply:
+    def __init__(self, message_str: str) -> None:
+        self.message_str = message_str
 
 
 @dataclass
@@ -134,7 +161,7 @@ class FakeEvent:
         message_id: str = "m1",
         private: bool = True,
         group_id: str = "",
-        bot_directed: bool = False,
+        bot_directed: bool | None = None,
         messages: list[object] | None = None,
         activated_handlers: list[object] | None = None,
     ) -> None:
@@ -143,7 +170,7 @@ class FakeEvent:
         self._text = text
         self._private = private
         self._group_id = group_id
-        self.is_at_or_wake_command = bot_directed
+        self.is_at_or_wake_command = private if bot_directed is None else bot_directed
         self._messages = messages if messages is not None else [Plain(text)]
         self._extras = {"activated_handlers": activated_handlers or []}
         self._stopped = False
@@ -235,6 +262,14 @@ class SavingConfig(dict):
 
     def save_config(self) -> None:
         self.save_calls += 1
+
+
+def test_missing_adapter_timestamp_uses_stable_deduplication_value() -> None:
+    event = FakeEvent("可以")
+    event.message_obj.timestamp = None  # type: ignore[assignment]
+
+    assert ConversationCloserPlugin._timestamp(event) == 0.0
+    assert ConversationCloserPlugin._timestamp(event) == 0.0
 
 
 @pytest.mark.asyncio
@@ -390,11 +425,33 @@ async def test_commands_are_never_judged() -> None:
         message_id="m2",
         activated_handlers=[_Handler([CommandFilter()])],
     )
+    group_metadata_event = FakeEvent(
+        "closer status",
+        message_id="m3",
+        activated_handlers=[_Handler([CommandGroupFilter()])],
+    )
     await plugin.on_message(slash_event)
     await plugin.on_message(metadata_event)
+    await plugin.on_message(group_metadata_event)
     assert context.calls == []
     assert slash_event._stopped is False
     assert metadata_event._stopped is False
+    assert group_metadata_event._stopped is False
+
+
+@pytest.mark.asyncio
+async def test_unwoken_private_message_is_never_read_or_judged() -> None:
+    context = FakeContext(
+        '{"decision":"END","confidence":1,"reason":"不应调用"}'
+    )
+    plugin = ConversationCloserPlugin(context, plugin_config())
+    event = FakeEvent("无需唤醒的私聊", bot_directed=False)
+
+    await plugin.on_message(event)
+
+    assert context.calls == []
+    assert await plugin.store.snapshot(event.unified_msg_origin) == ()
+    assert event._stopped is False
 
 
 @pytest.mark.asyncio
@@ -415,6 +472,120 @@ async def test_assistant_history_records_plain_and_media_after_send() -> None:
 
 
 @pytest.mark.asyncio
+async def test_after_message_sent_is_idempotent() -> None:
+    plugin = ConversationCloserPlugin(
+        FakeContext('{"decision":"CONTINUE","confidence":1,"reason":"继续"}'),
+        plugin_config(),
+    )
+    event = FakeEvent("问题")
+    event._result = _Result([Plain("只应记录一次")])
+    await plugin.capture_outgoing_result(event)
+
+    await plugin.after_message_sent(event)
+    await plugin.after_message_sent(event)
+
+    history = await plugin.store.snapshot(event.unified_msg_origin)
+    assert [item.content for item in history] == ["只应记录一次"]
+
+
+@pytest.mark.asyncio
+async def test_concurrent_after_hook_retries_after_first_write_failure() -> None:
+    plugin = ConversationCloserPlugin(
+        FakeContext('{"decision":"CONTINUE","confidence":1,"reason":"继续"}'),
+        plugin_config(),
+    )
+    event = FakeEvent("问题")
+    event._result = _Result([Plain("并发回复")])
+    await plugin.capture_outgoing_result(event)
+    original_record = plugin.service.record_assistant
+    first_entered = asyncio.Event()
+    allow_failure = asyncio.Event()
+    attempts = 0
+
+    async def flaky_record(**kwargs) -> bool:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            first_entered.set()
+            await allow_failure.wait()
+            raise RuntimeError("synthetic write failure")
+        return await original_record(**kwargs)
+
+    plugin.service.record_assistant = flaky_record  # type: ignore[method-assign]
+    first = asyncio.create_task(plugin.after_message_sent(event))
+    await first_entered.wait()
+    second = asyncio.create_task(plugin.after_message_sent(event))
+    allow_failure.set()
+    await asyncio.gather(first, second)
+
+    history = await plugin.store.snapshot(event.unified_msg_origin)
+    assert attempts == 2
+    assert [item.content for item in history] == ["并发回复"]
+
+
+@pytest.mark.asyncio
+async def test_mixed_media_user_message_cannot_be_stopped_by_end() -> None:
+    context = FakeContext(
+        '{"decision":"END","confidence":1,"reason":"看似完成"}'
+    )
+    plugin = ConversationCloserPlugin(context, plugin_config())
+    event = FakeEvent("可以", messages=[Plain("可以"), Image()])
+    await plugin.service.record_assistant(
+        session_id=event.unified_msg_origin,
+        content="请把截图发给我，我再继续排查",
+        timestamp=0,
+    )
+
+    await plugin.on_message(event)
+
+    assert event._stopped is False
+    history = await plugin.store.snapshot(event.unified_msg_origin)
+    assert history[-1].content == "可以\n[图片]"
+
+
+@pytest.mark.asyncio
+async def test_tts_record_keeps_text_but_cannot_prove_end() -> None:
+    context = FakeContext(
+        '{"decision":"END","confidence":1,"reason":"看似完成"}'
+    )
+    plugin = ConversationCloserPlugin(context, plugin_config())
+    sent = FakeEvent("原问题")
+    sent._result = _Result([Record("需要我现在应用修改吗？")])
+    await plugin.capture_outgoing_result(sent)
+    await plugin.after_message_sent(sent)
+
+    incoming = FakeEvent("可以", message_id="m2")
+    await plugin.on_message(incoming)
+
+    assert incoming._stopped is False
+    history = await plugin.store.snapshot(incoming.unified_msg_origin)
+    assert history[-2].content == "需要我现在应用修改吗？\n[语音]"
+
+
+@pytest.mark.asyncio
+async def test_reply_to_old_task_cannot_be_stopped_by_end() -> None:
+    context = FakeContext(
+        '{"decision":"END","confidence":1,"reason":"看似完成"}'
+    )
+    plugin = ConversationCloserPlugin(context, plugin_config())
+    incoming = FakeEvent(
+        "可以",
+        messages=[Reply("需要我现在执行待处理的修改吗？"), Plain("可以")],
+    )
+    await plugin.service.record_assistant(
+        session_id=incoming.unified_msg_origin,
+        content="晚安",
+        timestamp=0,
+    )
+
+    await plugin.on_message(incoming)
+
+    assert incoming._stopped is False
+    history = await plugin.store.snapshot(incoming.unified_msg_origin)
+    assert history[-1].content == "需要我现在执行待处理的修改吗？\n[引用消息]\n可以"
+
+
+@pytest.mark.asyncio
 async def test_media_only_user_message_never_gets_swallowed() -> None:
     context = FakeContext('{"decision":"END","confidence":1,"reason":"完成"}')
     plugin = ConversationCloserPlugin(context, plugin_config())
@@ -424,6 +595,20 @@ async def test_media_only_user_message_never_gets_swallowed() -> None:
     assert context.calls == []
     history = await plugin.store.snapshot(event.unified_msg_origin)
     assert history[-1].content == "[图片]"
+
+
+@pytest.mark.asyncio
+async def test_unknown_message_component_is_not_silently_discarded() -> None:
+    context = FakeContext('{"decision":"END","confidence":1,"reason":"完成"}')
+    plugin = ConversationCloserPlugin(context, plugin_config())
+    event = FakeEvent("", messages=[Sticker()])
+
+    await plugin.on_message(event)
+
+    assert event._stopped is False
+    assert context.calls == []
+    history = await plugin.store.snapshot(event.unified_msg_origin)
+    assert history[-1].content == "[其他消息]"
 
 
 @pytest.mark.asyncio

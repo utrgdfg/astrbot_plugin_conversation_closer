@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import time
 from dataclasses import dataclass
 
@@ -76,21 +77,32 @@ class ConversationCloserService:
                 ),
             )
 
-        content = bound_text(message.text or message.outline, self.settings.max_message_chars)
+        source_content = (message.outline or message.text).strip()
+        content = bound_text(source_content, self.settings.max_message_chars)
         if not content:
             return ProcessResult(should_stop=False, judged=False, duplicate=False)
+        content_fingerprint = hashlib.blake2s(
+            f"{message.timestamp!r}\0{source_content}".encode(),
+            digest_size=16,
+        ).digest()
 
         try:
             async with self.store.locked(message.session_id) as state:
-                cached = self.store.get_processed(state, message.message_id)
+                cached = self.store.get_processed(
+                    state,
+                    message.message_id,
+                    content_fingerprint,
+                )
                 if cached is not None:
                     return ProcessResult(
-                        should_stop=self._should_stop(cached),
-                        judged=True,
+                        should_stop=self._should_stop(cached.result),
+                        judged=cached.judged,
                         duplicate=True,
-                        result=cached,
+                        result=cached.result,
                     )
 
+                history_before = tuple(state.history)
+                dropped_before = state.dropped_message_count
                 self.store.append_message(
                     state,
                     role="user",
@@ -111,13 +123,31 @@ class ConversationCloserService:
                     )
                     judged = False
                 else:
-                    result = await self.judge.evaluate(tuple(state.history))
+                    try:
+                        result = await self.judge.evaluate(
+                            tuple(state.history),
+                            source_omitted_message_count=state.dropped_message_count,
+                        )
+                    except asyncio.CancelledError:
+                        state.history.clear()
+                        state.history.extend(history_before)
+                        state.dropped_message_count = dropped_before
+                        raise
                     judged = True
 
                 state.last_judge = result
-                self.store.remember_processed(state, message.message_id, result)
+                self.store.remember_processed(
+                    state,
+                    message.message_id,
+                    content_fingerprint,
+                    result,
+                    judged=judged,
+                )
+                should_stop = self._should_stop(result)
+                if should_stop:
+                    self.store.reset_history(state)
                 return ProcessResult(
-                    should_stop=self._should_stop(result),
+                    should_stop=should_stop,
                     judged=judged,
                     duplicate=False,
                     result=result,

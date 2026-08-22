@@ -121,6 +121,7 @@ https://github.com/utrgdfg/astrbot_plugin_conversation_closer
 | `/closer test` | 查看当前会话最近一次判断结果 |
 
 这些命令不会被本插件拦截。普通聊天中也不会出现调试提示或“对话已结束”之类的消息。
+三个管理命令仅允许 AstrBot 管理员使用，避免公开模型标识、判断原因或群聊共享缓存。
 
 ## 判断失败会怎样
 
@@ -155,7 +156,7 @@ https://github.com/utrgdfg/astrbot_plugin_conversation_closer
 2. 独立判断模型只判断 `END`、`CONTINUE` 或 `UNCERTAIN`，不会替用户生成回复。
 3. 只有高可信度 `END` 会调用 `event.stop_event()`，机器人保持真正的沉默。
 4. 其他结果和所有异常都不修改 AstrBot 原有流程。
-5. 机器人实际发送成功的内容会通过 AstrBot 官方发送后钩子加入会话历史。
+5. 机器人进入 AstrBot 官方发送后钩子的内容会加入会话历史。
 
 同一会话会按顺序处理，不同会话互不阻塞；历史、消息去重记录和会话锁都有数量或时间限制，不会无限增长。
 
@@ -167,7 +168,9 @@ https://github.com/utrgdfg/astrbot_plugin_conversation_closer
 - 持续集成覆盖 Python 3.12、3.13、3.14，并检查 AstrBot `v4.24.2` 与官方主线接口。
 - 目前尚未完成真实平台适配器的端到端测试，因此暂不声明特定平台支持范围。
 - 群聊中的交流边界更复杂，默认关闭并视为实验功能。
-- 第一版不理解图片、语音、视频或文件内容，只记录轻量占位符。
+- AstrBot 当前的流式发送流程不会触发发送后钩子，因此流式回复无法写入本插件历史；缺少相邻机器人回复时，插件会保守地继续放行。
+- AstrBot 当前的发送后钩子不提供适配器发送成功状态。极少数平台发送失败时，插件可能暂时记录一条用户实际未收到的机器人回复，需由 AstrBot 上游提供成功标志后才能彻底消除。
+- 插件不会主动转录图片、语音、视频或文件；如果 AstrBot 已提供 TTS 原始文本，会记录该文本及语音占位符，其余媒体只记录轻量占位符。
 - 会话历史只保存在内存中，不会跨重启保留。
 - 不同模型服务的能力不同，实际判断效果可能存在差异。
 
@@ -209,5 +212,3 @@ bandit -q -r . -x ./tests
 - 源代码许可证：[MIT](LICENSE)
 
 本插件为独立实现，没有复制或修改 should-I-respond 类插件代码。项目图标由维护者提供，不自动适用源码 MIT 许可证；再分发前请阅读 [`ASSET_LICENSE.md`](ASSET_LICENSE.md)。
-
-[![萌娘计数器](https://mayu.due.moe/get/@utrgdfg-astrbot_plugin_conversation_closer?theme=booru-lewd)](https://github.com/utrgdfg/astrbot_plugin_conversation_closer)
